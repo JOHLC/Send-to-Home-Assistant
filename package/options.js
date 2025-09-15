@@ -1,11 +1,40 @@
 // Display extension version in options page
 document.addEventListener('DOMContentLoaded', function() {
   const versionDiv = document.getElementById('extVersion');
+  const updateDiv = document.getElementById('updateStatus');
+  const updateCheckToggle = document.getElementById('updateCheckToggle');
+  // Load update check preference
+  if (updateCheckToggle && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get('updateCheckEnabled', (data) => {
+      if (typeof data.updateCheckEnabled === 'boolean') {
+        updateCheckToggle.checked = data.updateCheckEnabled;
+      } else {
+        updateCheckToggle.checked = true; // default to enabled
+      }
+    });
+    updateCheckToggle.addEventListener('change', () => {
+      chrome.storage.local.set({updateCheckEnabled: updateCheckToggle.checked});
+    });
+  }
   if (versionDiv && chrome.runtime && chrome.runtime.getManifest) {
     const manifest = chrome.runtime.getManifest();
     if (manifest && manifest.version) {
       versionDiv.textContent = `Version: v${manifest.version}`;
     }
+  }
+
+  // Show update status if available
+  if (updateDiv && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get('updateInfo', (data) => {
+      const info = data.updateInfo;
+      if (info && info.isNewer && info.latest && info.html_url) {
+  updateDiv.innerHTML = `<div class="update-available">New version available: <a href="${info.html_url}" target="_blank" rel="noopener noreferrer" class="link-blue">v${info.latest}</a></div>`;
+      } else if (info && !info.isNewer) {
+  updateDiv.innerHTML = `<div class="update-latest">You are using the latest version.</div>`;
+      } else {
+        updateDiv.innerHTML = '';
+      }
+    });
   }
 });
 
@@ -19,8 +48,25 @@ const sslToggle = document.getElementById('sslToggle');
 const webhookIdInput = document.getElementById('webhookId');
 const userInput = document.getElementById('userName');
 const statusDiv = document.getElementById('status');
+const deviceInput = document.getElementById('deviceName');
 const saveBtn = document.getElementById('save');
 const testBtn = document.getElementById('test');
+const clearBtn = document.getElementById('clearConfig');
+// Clear config handler
+if (clearBtn) {
+  clearBtn.addEventListener('click', () => {
+    chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName'], () => {
+      hostInput.value = '';
+      sslToggle.checked = true;
+      webhookIdInput.value = '';
+      userInput.value = '';
+      statusDiv.textContent = 'Config cleared!';
+      if (deviceInput) deviceInput.value = '';
+      statusDiv.className = 'status success';
+      setTimeout(() => { statusDiv.textContent = ''; }, 2000);
+    });
+  });
+}
 
 function updateSslWarning() {
   let warn = document.getElementById('sslWarn');
@@ -36,10 +82,10 @@ function updateSslWarning() {
       warn.style.margin = '0.7em 0 1em 0';
       warn.style.fontSize = '1em';
       warn.innerHTML =
-        '<b>Warning:</b> You are not using SSL (https).<br>This is not secure!<br>' +
-        '<br>Without SSL encryption, you are effectively broadcasting any data sent to this webhook to anyone who wants it.<br><br>' +
-        'It is not that hard to set up and should REALLY be configured, especially if you are accessing your Home Assistant remotely. <br>See <a href="https://www.home-assistant.io/docs/configuration/securing/#remote-access" target="_blank" style="color:#ffb347;text-decoration:underline;">Remote Access Security</a> and ' +
-        '<a href="https://www.home-assistant.io/integrations/http/#ssl_certificate" target="_blank" style="color:#ffb347;text-decoration:underline;">SSL Certificate Setup</a> for help on setting that up.';
+  '<b>Warning:</b> You are not using SSL (https).<br>This is not secure!<br>' +
+  '<br>Without SSL encryption, you are effectively broadcasting any data sent to this webhook to anyone who wants it.<br><br>' +
+  'It is not that hard to set up and should REALLY be configured, especially if you are accessing your Home Assistant remotely. <br>See <a href="https://www.home-assistant.io/docs/configuration/securing/#remote-access" target="_blank" class="link-warn">Remote Access Security</a> and ' +
+  '<a href="https://www.home-assistant.io/integrations/http/#ssl_certificate" target="_blank" class="link-warn">SSL Certificate Setup</a> for help on setting that up.';
       sslToggle.parentNode.parentNode.insertBefore(warn, sslToggle.parentNode.nextSibling);
     }
   } else if (warn) {
@@ -52,12 +98,13 @@ function validateUrl(url) {
   return /^https?:\/\/.+\/api\/webhook\/.+/.test(url);
 }
 
-// Load saved host, ssl, webhookId, and user
-chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName'], (result) => {
+// Load saved host, ssl, webhookId, user, and deviceName
+chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
   if (result.haHost) hostInput.value = result.haHost;
   if (typeof result.ssl === 'boolean') sslToggle.checked = result.ssl;
   if (result.webhookId) webhookIdInput.value = result.webhookId;
   if (result.userName) userInput.value = result.userName;
+  if (result.deviceName && deviceInput) deviceInput.value = result.deviceName;
 });
 
 saveBtn.addEventListener('click', () => {
@@ -65,6 +112,7 @@ saveBtn.addEventListener('click', () => {
   const ssl = sslToggle.checked;
   const webhookId = webhookIdInput.value.trim();
   const user = userInput.value.trim();
+  const device = deviceInput ? deviceInput.value.trim() : '';
   if (!host) {
     statusDiv.textContent = 'Please enter your Home Assistant hostname or IP.';
     statusDiv.className = 'status error';
@@ -72,6 +120,11 @@ saveBtn.addEventListener('click', () => {
   }
   if (!webhookId) {
     statusDiv.textContent = 'Please enter your Home Assistant webhook ID.';
+  if (device && !/^[\w\s-]{1,32}$/.test(device)) {
+    statusDiv.textContent = 'Device name can only contain letters, numbers, spaces, dashes, and underscores (max 32 chars).';
+    statusDiv.className = 'status error';
+    return;
+  }
     statusDiv.className = 'status error';
     return;
   }
@@ -89,7 +142,7 @@ saveBtn.addEventListener('click', () => {
         return;
       }
       // Only save if valid
-      chrome.storage.sync.set({haHost: host, ssl, webhookId, userName: user}, () => {
+      chrome.storage.sync.set({haHost: host, ssl, webhookId, userName: user, deviceName: device}, () => {
         statusDiv.textContent = 'Saved!';
         statusDiv.className = 'status success';
         setTimeout(() => { statusDiv.textContent = ''; }, 2000);
@@ -107,6 +160,8 @@ testBtn.addEventListener('click', () => {
   const host = hostInput.value.trim();
   const ssl = sslToggle.checked;
   const webhookId = webhookIdInput.value.trim();
+  const user = userInput.value.trim();
+  const device = deviceInput ? deviceInput.value.trim() : '';
   if (!host) {
     statusDiv.textContent = 'Please enter your Home Assistant hostname or IP.';
     statusDiv.className = 'status error';
@@ -120,10 +175,20 @@ testBtn.addEventListener('click', () => {
   const url = `${ssl ? 'https' : 'http'}://${host}/api/webhook/${webhookId}`;
   statusDiv.textContent = 'Testing...';
   statusDiv.className = 'status';
+  const payload = {
+    title: 'Test from extension',
+    url: window.location.origin,
+    favicon: 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon.png',
+    selected: 'Sample selected text',
+    timestamp: new Date().toISOString(),
+    user_agent: navigator.userAgent
+  };
+  if (user) payload.user = user;
+  if (device) payload.device = device;
   fetch(url, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({title: 'Test from extension', url: window.location.origin})
+    body: JSON.stringify(payload)
   })
   .then(resp => {
     if (resp.ok) {

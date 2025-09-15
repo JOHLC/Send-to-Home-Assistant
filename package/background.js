@@ -1,3 +1,60 @@
+// --- Extension update check (GitHub releases) ---
+const UPDATE_CHECK_KEY = 'lastUpdateCheck';
+const UPDATE_INFO_KEY = 'updateInfo';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/JOHLC/Send-to-Home-Assistant/releases/latest';
+const EXT_VERSION = chrome.runtime.getManifest().version;
+
+function checkForUpdate() {
+  const now = Date.now();
+  chrome.storage.local.get(['updateCheckEnabled', UPDATE_CHECK_KEY, UPDATE_INFO_KEY], (data) => {
+    if (data.updateCheckEnabled === false) {
+      // User disabled update checks
+      chrome.storage.local.remove([UPDATE_INFO_KEY, UPDATE_CHECK_KEY]);
+      return;
+    }
+    const lastCheck = data[UPDATE_CHECK_KEY] || 0;
+    // 24 hours = 86400000 ms
+    if (now - lastCheck < 86400000 && data[UPDATE_INFO_KEY]) {
+      // Already checked within 24h, do nothing
+      return;
+    }
+    fetch(GITHUB_RELEASES_API)
+      .then(resp => resp.json())
+      .then(release => {
+        let latest = release.tag_name || release.name || '';
+        if (latest.startsWith('v')) latest = latest.slice(1);
+        const isNewer = compareVersions(latest, EXT_VERSION) > 0;
+        const info = {
+          isNewer,
+          latest,
+          html_url: release.html_url,
+          body: release.body || '',
+          checkedAt: now
+        };
+        chrome.storage.local.set({[UPDATE_CHECK_KEY]: now, [UPDATE_INFO_KEY]: info});
+      })
+      .catch(() => {
+        // On error, clear update info
+        chrome.storage.local.remove([UPDATE_INFO_KEY]);
+      });
+  });
+}
+
+// Simple version comparison: returns 1 if a > b, -1 if a < b, 0 if equal
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0, nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
+// Run on startup
+checkForUpdate();
+chrome.runtime.onStartup && chrome.runtime.onStartup.addListener(checkForUpdate);
 // background.js
 // Listen for popup.js requesting status
 let lastSendStatus = null;
@@ -19,19 +76,22 @@ chrome.action.onClicked.addListener(async (tab) => {
     lastSendStatus = {status: 'error', error: 'Cannot send from browser internal pages.'};
     return;
   }
-  chrome.storage.sync.get(['webhookUrl'], async (result) => {
-    const webhookUrl = result.webhookUrl;
-    if (!webhookUrl) {
+  chrome.storage.sync.get(['haHost', 'ssl', 'webhookId'], async (result) => {
+    const haHost = result.haHost;
+    const ssl = typeof result.ssl === 'boolean' ? result.ssl : true;
+    const webhookId = result.webhookId;
+    if (!haHost || !webhookId) {
       chrome.runtime.openOptionsPage();
       chrome.notifications?.create({
         type: 'basic',
         iconUrl: 'icon.png',
         title: 'Send to Home Assistant',
-        message: 'Please set your Home Assistant webhook URL in the extension options.'
+        message: 'Please set your Home Assistant hostname and webhook ID in the extension options.'
       });
-      lastSendStatus = {status: 'error', error: 'No webhook URL set.'};
+      lastSendStatus = {status: 'error', error: 'No webhook host or ID set.'};
       return;
     }
+    const webhookUrl = `${ssl ? 'https' : 'http'}://${haHost}/api/webhook/${webhookId}`;
     chrome.scripting.executeScript({
       target: {tabId: tab.id},
       func: () => {

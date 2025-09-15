@@ -72,4 +72,18 @@ MIT
 
 ---  
 
-**Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/).  
+**Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/)
+
+## Privacy Notice
+
+This extension collects the following data when you use it:
+- Page title
+- URL
+- Favicon
+- Selected text
+- Timestamp
+- User agent
+- Optional user name and device name (if provided in options)
+
+**All data is sent only to your configured Home Assistant webhook and is never sent to any third party or external server.**
+No data is collected or stored by the extension author.

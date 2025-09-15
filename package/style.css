@@ -1,3 +1,83 @@
+/* Center preview row for favicon */
+.preview-row-center {
+  justify-content: center;
+}
+/* Favicon image in preview */
+.preview-favicon {
+  width: 38px;
+  height: 38px;
+  vertical-align: middle;
+  margin-bottom: 0.5em;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px #00b4fc44;
+}
+/* Update available message */
+.update-available {
+  color: #ffb347;
+  font-weight: 600;
+  margin-top: 0.5em;
+}
+/* Latest version message */
+.update-latest {
+  color: #00e6a8;
+  font-weight: 600;
+  margin-top: 0.5em;
+}
+/* Warning links */
+.link-warn {
+  color: #ffb347;
+  text-decoration: underline;
+}
+/* For small label notes (replaces inline style) */
+.label-note {
+  color: #7fd0ff;
+  font-weight: 400;
+  font-size: 0.95em;
+}
+
+/* For hiding elements (replaces inline style display:none) */
+.hidden {
+  display: none !important;
+}
+/* Options page custom classes for CSP compliance */
+.privacy {
+  margin-top: 1.5em;
+  font-size: 0.97em;
+  color: #b3e6ff;
+  background: #232e4a;
+  padding: 1em 1.2em;
+  border-radius: 10px;
+  max-width: 420px;
+}
+.link-blue {
+  color: #7fd0ff;
+  text-decoration: underline;
+}
+.clear-btn {
+  background: linear-gradient(90deg,#ff4e6a 0%,#ffb347 100%) !important;
+  color: #fff !important;
+}
+.update-toggle-row {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5em;
+}
+.update-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.footer-row {
+  margin-top: 1.5em;
+  text-align: center;
+  font-size: 0.98em;
+}
+.ext-version {
+  margin-top: 0.5em;
+  color: #888;
+  font-size: 0.97em;
+}
 .copy-btn-wrapper, #copyBtnWrapper {
   display: flex;
   justify-content: center;

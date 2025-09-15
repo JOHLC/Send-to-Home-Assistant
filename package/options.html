@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -18,22 +19,40 @@
   <input type="text" id="haHost" placeholder="myhome.duckdns.org or 192.168.1.2">
   <label for="sslToggle"><input type="checkbox" id="sslToggle" checked> Use SSL (https)</label>
   <div class="webhook-row">
-    <label for="webhookId"><a href="https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger" target="_blank" rel="noopener noreferrer" style="color:#7fd0ff;text-decoration:underline;">Webhook ID</a></label> 
+  <label for="webhookId"><a href="https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger" target="_blank" rel="noopener noreferrer" class="link-blue">Webhook ID</a></label> 
     <input type="text" id="webhookId" placeholder="xxxxxx-xxxxxxxxxxxx">
   </div>
-  <label for="userName">User <span style="color:#7fd0ff;font-weight:400;font-size:0.95em;">(optional)</span></label>
-  <input type="text" id="userName" placeholder="Your name (optional)">
+  <label for="userName">User <span class="label-note">(optional)</span></label>
+  <input type="text" id="userName" placeholder="Your name (optional)" maxlength="32">
+  <label for="deviceName">Device Name <span class="label-note">(optional, for identifying this device)</span></label>
+  <input type="text" id="deviceName" placeholder="e.g. Work Laptop" maxlength="32">
+
     <div class="btn-row">
       <button id="test" class="copy-btn">Test</button>
       <button id="save" class="copy-btn">Save</button>
+  <button id="clearConfig" class="copy-btn clear-btn">Clear Config</button>
     </div>
 
-    <div class="status" id="status"></div>
-    <div style="margin-top:1.5em;text-align:center;font-size:0.98em;">
-      <a href="https://github.com/JOHLC/Send-to-Home-Assistant" target="_blank" rel="noopener noreferrer" style="color:#7fd0ff;text-decoration:underline;">
+  <div class="status" id="status"></div>
+  
+    <div class="privacy">
+      <b>Privacy Notice:</b><br>
+      This extension collects the following data when you use it: <b>page title, URL, favicon, selected text, timestamp, user agent, and any optional user/device name you provide</b>.<br>
+      <b>All data is sent only to your configured Home Assistant webhook</b> and is never sent to any third party or external server.<br>
+      No data is collected or stored by the extension author.
+    </div>
+    <div id="updateStatus"></div>
+    <div class="update-toggle-row">
+      <label for="updateCheckToggle" class="update-toggle-label">
+        <input type="checkbox" id="updateCheckToggle" checked>
+        Check for extension updates automatically
+      </label>
+    </div>
+    <div class="footer-row">
+      <a href="https://github.com/JOHLC/Send-to-Home-Assistant" target="_blank" rel="noopener noreferrer" class="link-blue">
         View on GitHub
       </a>
-      <div id="extVersion" style="margin-top:0.5em;color:#888;font-size:0.97em;"></div>
+      <div id="extVersion" class="ext-version"></div>
     </div>
   </div>
   <script src="options.js"></script>

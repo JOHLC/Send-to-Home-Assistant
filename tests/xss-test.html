@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><img src=x onerror=alert('XSS-title')> XSS Test</title>
+</head>
+<body>
+  <h1>XSS Injection Test Page</h1>
+  <p>Try using the extension on this page to test for code injection vulnerabilities.</p>
+  <h2>Malicious Content</h2>
+  <div id="malicious-title">Title: <img src=x onerror=alert('XSS-title-div')></div>
+  <div id="malicious-selection">
+    <p>Select this text: <span id="select-me">&lt;img src=x onerror=alert('XSS-selection')&gt;</span></p>
+  </div>
+  <div id="malicious-url">
+    <a href="http://example.com/?q=<script>alert('XSS-url')</script>">Malicious URL</a>
+  </div>
+  <div id="malicious-html">
+    <p>HTML payload: <span>&lt;script&gt;alert('XSS-html')&lt;/script&gt;</span></p>
+  </div>
+  <p>Instructions:</p>
+  <ol>
+    <li>Try using the extension on this page.</li>
+    <li>Check the popup preview for any alert boxes or rendered HTML.</li>
+    <li>Check the Home Assistant payload for escaped content.</li>
+  </ol>
+</body>
+</html>

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Send to Home Assistant",
-  "version": "1.0",
+  "version": "v2025.09.2-beta",
   "description": "Send the current page URL and title to your Home Assistant webhook.",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": ["<all_urls>"],
@@ -24,5 +24,11 @@
     "32": "icon.png",
     "48": "icon.png",
     "128": "icon.png"
-  }
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: http:;"
+  },
+  "homepage_url": "https://github.com/JOHLC/Send-to-Home-Assistant",
+  "short_name": "Send to HA",
+  "author": "@JOHLC"
 }

@@ -28,18 +28,19 @@ async function sendToHA() {
       return;
     }
     // Get host, ssl, webhookId, and user from storage
-    chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName'], (result) => {
-      const haHost = result.haHost;
-      const ssl = typeof result.ssl === 'boolean' ? result.ssl : true;
-      const webhookId = result.webhookId;
-      const userName = result.userName;
-      if (!haHost || !webhookId) {
-        msgDiv.textContent = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
-        okBtn.style.display = '';
-        chrome.runtime.openOptionsPage();
-        return;
-      }
-      const webhookUrl = `${ssl ? 'https' : 'http'}://${haHost}/api/webhook/${webhookId}`;
+      chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
+        const haHost = result.haHost;
+        const ssl = typeof result.ssl === 'boolean' ? result.ssl : true;
+        const webhookId = result.webhookId;
+        const userName = result.userName;
+        const deviceName = result.deviceName;
+        if (!haHost || !webhookId) {
+          msgDiv.textContent = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
+          okBtn.style.display = '';
+          chrome.runtime.openOptionsPage();
+          return;
+        }
+        const webhookUrl = `${ssl ? 'https' : 'http'}://${haHost}/api/webhook/${webhookId}`;
       // Collect page info from tab
       chrome.scripting.executeScript({
         target: {tabId: tab.id},
@@ -100,6 +101,9 @@ async function sendToHA() {
         if (userName) {
           pageInfo.user = userName;
         }
+        if (deviceName) {
+          pageInfo.device = deviceName;
+        }
         fetch(webhookUrl, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -116,13 +120,22 @@ async function sendToHA() {
               preview.className = 'preview';
               msgDiv.parentNode.insertBefore(preview, okBtn);
             }
+            // Escape HTML to prevent XSS/code injection
+            function escapeHTML(str) {
+              return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            }
             preview.innerHTML =
               '<div>' +
-              (pageInfo.favicon ? `<div class="preview-row" style="justify-content:center;"><img src="${pageInfo.favicon}" alt="favicon" style="width:38px;height:38px;vertical-align:middle;margin-bottom:0.5em;border-radius:8px;box-shadow:0 1px 4px #00b4fc44;"></div>` : '') +
-              `<div class="preview-row"><span class="preview-label">Title:</span><span class="preview-value">${pageInfo.title}</span></div>` +
-              `<div class="preview-row"><span class="preview-label">URL:</span><span class="preview-value preview-url" title="${pageInfo.url}"><a href="${pageInfo.url}" target="_blank" rel="noopener noreferrer" style="color:#7fd0ff;text-decoration:underline;">${pageInfo.url}</a></span></div>` +
-              (pageInfo.selected ? `<div class="preview-row"><span class="preview-label">Selected:</span><span class="preview-value">${pageInfo.selected}</span></div>` : '') +
-              `<div class="preview-row"><span class="preview-label">Timestamp:</span><span class="preview-value">${pageInfo.timestamp.replace('T',' ').replace('Z','')}</span></div>` +
+              (pageInfo.favicon ? `<div class="preview-row preview-row-center"><img src="${escapeHTML(pageInfo.favicon)}" alt="favicon" class="preview-favicon"></div>` : '') +
+              `<div class="preview-row"><span class="preview-label">Title:</span><span class="preview-value">${escapeHTML(pageInfo.title)}</span></div>` +
+              `<div class="preview-row"><span class="preview-label">URL:</span><span class="preview-value preview-url" title="${escapeHTML(pageInfo.url)}"><a href="${escapeHTML(pageInfo.url)}" target="_blank" rel="noopener noreferrer" class="link-blue">${escapeHTML(pageInfo.url)}</a></span></div>` +
+              (pageInfo.selected ? `<div class="preview-row"><span class="preview-label">Selected:</span><span class="preview-value">${escapeHTML(pageInfo.selected)}</span></div>` : '') +
+              `<div class="preview-row"><span class="preview-label">Timestamp:</span><span class="preview-value">${escapeHTML(pageInfo.timestamp.replace('T',' ').replace('Z',''))}</span></div>` +
               '</div>';
             // Add copy to clipboard button for JSON
             let copyBtn = document.getElementById('copyJsonBtn');
