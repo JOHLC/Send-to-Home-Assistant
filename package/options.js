@@ -1,3 +1,13 @@
+// Display extension version in options page
+document.addEventListener('DOMContentLoaded', function() {
+  const versionDiv = document.getElementById('extVersion');
+  if (versionDiv && chrome.runtime && chrome.runtime.getManifest) {
+    const manifest = chrome.runtime.getManifest();
+    if (manifest && manifest.version) {
+      versionDiv.textContent = `Version: v${manifest.version}`;
+    }
+  }
+});
 
 
 // Show SSL warning if not checked
