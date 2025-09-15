@@ -1,6 +1,6 @@
 
 <div align="center">
-	<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon.png" alt="Send to Home Assistant Logo" width="96" height="96">
+	<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon.png" alt="Send to Home Assistant Logo" width="auto" height="200">
 </div>
 
 # Send to Home Assistant – Chrome/Edge Extension
@@ -46,10 +46,12 @@ A simple browser extension that lets you send the current page’s details (URL,
 - SSL is strongly recommended; you’ll be warned if it’s not enabled.  
 
 ## Screenshots  
+
 Options Page Screenshot  
-<div align="center">
-	<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/assets/screenshot1-png" alt="Send to Home Assistant Logo" width="96" height="96">
+<div align="left">
+	<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/assets/screenshot-1.png" alt="Send to Home Assistant Logo" width="auto" height="500px">
 </div>
+
 ## License  
 
 MIT  
@@ -57,5 +59,6 @@ MIT
 ---  
 
 **Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/).  
+
 
 
