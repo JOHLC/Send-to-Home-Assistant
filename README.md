@@ -46,9 +46,10 @@ A simple browser extension that lets you send the current page’s details (URL,
 - SSL is strongly recommended; you’ll be warned if it’s not enabled.  
 
 ## Screenshots  
-
-![Options Page Screenshot](screenshot-options.png)  
-
+Options Page Screenshot  
+<div align="center">
+	<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/assets/screenshot1-png" alt="Send to Home Assistant Logo" width="96" height="96">
+</div>
 ## License  
 
 MIT  
@@ -56,4 +57,5 @@ MIT
 ---  
 
 **Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/).  
+
 
