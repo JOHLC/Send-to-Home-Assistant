@@ -1,4 +1,9 @@
-# Send to Home Assistant – Chrome/Edge Extension  
+
+<div align="center">
+	<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon.png" alt="Send to Home Assistant Logo" width="96" height="96">
+</div>
+
+# Send to Home Assistant – Chrome/Edge Extension
 
 A simple browser extension that lets you send the current page’s details (URL, title, favicon, selected text, and more) to your Home Assistant instance via a webhook. Perfect for creating automations or quickly capturing content from any site.  
 
@@ -51,3 +56,4 @@ MIT
 ---  
 
 **Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/).  
+
