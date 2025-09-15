@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Send to Home Assistant - Options</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Remove all style rules here except for any page-specific overrides if needed */
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon"><img src="icon.png" width="36" height="36" alt="HA"></div>
+    <h2>Send to Home Assistant</h2>
+    <div class="desc">
+      <strong>Instructions</strong> <br>Enter your Home Assistant hostname or IP, choose SSL if your server uses https, and paste your <b>Webhook ID</b> (not the full URL).<br><p>Optionally, you can specify a User so that you can specify who the message is from.</p><br>
+  <label for="haHost">Home Assistant Hostname or IP</label>
+  <input type="text" id="haHost" placeholder="myhome.duckdns.org or 192.168.1.2">
+  <label for="sslToggle"><input type="checkbox" id="sslToggle" checked> Use SSL (https)</label>
+  <div class="webhook-row">
+    <label for="webhookId"><a href="https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger" target="_blank" rel="noopener noreferrer" style="color:#7fd0ff;text-decoration:underline;">Webhook ID</a></label> 
+    <input type="text" id="webhookId" placeholder="xxxxxx-xxxxxxxxxxxx">
+  </div>
+  <label for="userName">User <span style="color:#7fd0ff;font-weight:400;font-size:0.95em;">(optional)</span></label>
+  <input type="text" id="userName" placeholder="Your name (optional)">
+    <div class="btn-row">
+      <button id="test" class="copy-btn">Test</button>
+      <button id="save" class="copy-btn">Save</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

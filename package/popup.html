@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Send to Home Assistant</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Remove all style rules here except for any page-specific overrides if needed */
+  </style>
+</head>
+<body>
+    <svg width="0" height="0">
+      <defs>
+        <linearGradient id="blue-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#00b4fc"/>
+          <stop offset="100%" stop-color="#1a8cff"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  <button class="settings-link" id="settingsBtn" title="Open Settings" aria-label="Open Settings">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" fill="none"/>
+      <path d="M19.14,12.94a7.07,7.07,0,0,0,.05-1,7.07,7.07,0,0,0-.05-1l2.11-1.65a.5.5,0,0,0,.12-.65l-2-3.46a.5.5,0,0,0-.61-.22l-2.49,1a7.28,7.28,0,0,0-1.73-1l-.38-2.65A.5.5,0,0,0,13,3h-4a.5.5,0,0,0-.5.42l-.38,2.65a7.28,7.28,0,0,0-1.73,1l-2.49-1a.5.5,0,0,0-.61.22l-2,3.46a.5.5,0,0,0,.12.65l2.11,1.65a7.07,7.07,0,0,0-.05,1,7.07,7.07,0,0,0,.05,1L2.86,14.59a.5.5,0,0,0-.12.65l2,3.46a.5.5,0,0,0,.61.22l2.49-1a7.28,7.28,0,0,0,1.73,1l.38,2.65A.5.5,0,0,0,11,21h4a.5.5,0,0,0,.5-.42l.38-2.65a7.28,7.28,0,0,0,1.73-1l2.49,1a.5.5,0,0,0,.61-.22l2-3.46a.5.5,0,0,0-.12-.65ZM12,15.5A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z" fill="currentColor"/>
+    </svg>
+  </button>
+  <div class="container">
+    <div class="icon"><img src="icon.png" width="36" height="36" alt="HA"></div>
+    <div class="msg" id="popupMsg">Sending...</div>
+    <button class="ok-btn" id="okBtn" style="display:none;">OK</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

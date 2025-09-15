@@ -1,0 +1,289 @@
+.copy-btn-wrapper, #copyBtnWrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 0.5em;
+}
+/* home-assistant-theme.css */
+body {
+  background: linear-gradient(120deg, #000000 0%, #10112e 100%);
+  min-height: 100vh;
+  margin: 0;
+  min-width: 450px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Segoe UI', 'Roboto', 'Montserrat', Arial, sans-serif;
+  color: #eaf6ff;
+}
+
+.card, .container {
+  background: linear-gradient(120deg, #0d1e58 0%, #0f1175 100%);
+  border-radius: 20px;
+  box-shadow: 0 8px 40px 0 rgba(30,60,120,0.25), 0 1.5px 8px 0 #00b4fc44;
+  min-width: 500px;
+  max-width: 99vw;
+  padding: .5em 5em .5em 5em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.container {
+  border-radius: 0px;
+  padding-bottom: 2.5em;
+}
+body > div > div.icon > img {
+  width: 120px;
+  height: 120px;
+  filter: drop-shadow(0 1px 4px #00b4fc44);
+}
+.icon {
+  width: 125px;
+  height: 125px;
+  margin-top: 2.5em;
+  margin-bottom: 0.7em;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px #00b4fc44;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+h2 {
+  margin: 0 0 0.5em 0;
+  color: #eaf6ff;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-size: 1.45em;
+  text-shadow: 0 2px 8px #00b4fc33;
+}
+label {
+  display: block;
+  margin-bottom: 0.5em;
+  color: #b3e6ff;
+  justify-content: center;
+  gap: 1em;
+  width: auto;
+  align-self: center;
+}
+input[type="text"] {
+  width: 100%;
+  padding: 0.7em 1em;
+  font-size: 1.08em;
+  border: 2px solid #00b4fc;
+  border-radius: 10px;
+  margin-left: 0;
+  margin-right: 0;
+.webhook-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5em;
+  width: 100%;
+  margin-bottom: 1em;
+}
+.webhook-row > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.webhook-row button {
+  margin-bottom: 2px;
+  min-width: 70px;
+}
+  margin-bottom: 1em;
+  background: #1a223f;
+  color: #eaf6ff;
+  transition: border 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1.5px 8px #00b4fc22;
+}
+input[type="text"]:focus {
+  border: 2.5px solid #00b4fc;
+  outline: none;
+  box-shadow: 0 2px 12px #00b4fc44;
+}
+.btn-row {
+  display: flex;
+  gap: 1em;
+  width: 100%;
+  justify-content: center;
+}
+button, .ok-btn {
+  padding: 0.6em 1.6em;
+  font-size: 1em;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #00b4fc 0%, #1a8cff 100%);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 12px #00b4fc33;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  letter-spacing: 0.01em;
+}
+button:active, .ok-btn:active {
+  background: #1a8cff;
+  color: #eaf6ff;
+  box-shadow: 0 1px 4px #00b4fc44;
+}
+.status, .msg {
+  margin-top: 1.2em;
+  font-size: 1.05em;
+  min-height: 1.5em;
+  text-align: center;
+  font-weight: 600;
+  max-width: 420px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-line;
+  color: #fff;
+  text-shadow: 0 1px 4px #00b4fc22;
+}
+.status.error { color: #ff4e6a; }
+.status.success { color: #00e6a8; }
+.desc {
+  color: #b3e6ff;
+  font-size: 1.01em;
+  margin-bottom: 1.2em;
+  text-align: center;
+  max-width: 420px;
+  height: fit-content;
+  text-shadow: 0 1px 4px #00b4fc22;
+}
+.card::before, .container::before {
+  content: '';
+  position: absolute;
+  top: -60px; left: -60px;
+  width: 180px; height: 180px;
+  background: radial-gradient(circle, #00b4fc33 0%, transparent 80%);
+  z-index: 0;
+  pointer-events: none;
+}
+.card::after, .container::after {
+  content: '';
+  position: absolute;
+  bottom: -60px; right: -60px;
+  width: 180px; height: 180px;
+  background: radial-gradient(circle, #1a8cff33 0%, transparent 80%);
+  z-index: 0;
+  pointer-events: none;
+}
+.card > *, .container > * { position: relative; z-index: 1; }
+.preview {
+  background: #232e4a;
+  border-radius: 10px;
+  box-shadow: 0 1.5px 8px #00b4fc22;
+  padding: 1.2em 1.4em;
+  margin: 0.5em 0em 1.5em 0em;
+  color: #b3e6ff;
+  font-size: 0.98em;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+  text-align: left;
+  overflow-x: visible;
+  overflow-y: visible;
+}
+
+.preview .preview-row {
+  margin-bottom: 0.5em;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.preview .preview-label {
+  min-width: 75px;
+  font-weight: 600;
+  color: #7fd0ff;
+  margin-right: 0.05em;
+  padding-right: 0.2em;
+  flex-shrink: 0;
+}
+.preview .preview-value {
+  flex: 1 1 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #eaf6ff;
+  max-width: 420px;
+}
+
+.preview .preview-url {
+  max-width: 420px;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.ok-btn {
+  margin-top: 0.7em;
+}
+.copy-btn {
+  margin-top: 0.7em;
+  padding: 0.4em 1.1em;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #00b4fc 0%, #1a8cff 100%);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #00b4fc33;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  letter-spacing: 0.01em;
+  font-size: 0.98em;
+  display: block;
+  margin-left: 0;
+  margin-right: 0;
+}
+.copy-btn:active {
+  background: #1a8cff;
+  color: #eaf6ff;
+  box-shadow: 0 1px 4px #00b4fc44;
+}
+.settings-link {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  max-width: 38px;
+  max-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.13);
+  border: 1px solid #7fd0ff;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 2;
+  opacity: 1;
+  box-shadow: 0 2px 8px #00b4fc33;
+  transition: background 0.15s, border 0.15s, box-shadow 0.15s;
+  padding: 0;
+  overflow: hidden;
+}
+.settings-link:hover {
+  opacity: 1;
+}
+.settings-link svg {
+  width: 22px;
+  height: 22px;
+  fill: #7fd0ff;
+  filter: drop-shadow(0 1px 4px #00b4fc44);
+  transition: fill 0.15s;
+}
+.settings-link:focus svg,
+.settings-link:hover svg {
+  fill: #fff;
+}
+.settings-link:focus,
+.settings-link:hover {
+  background: rgba(0,180,252,0.18);
+  border: 1.5px solid #fff;
+  outline: none;
+  box-shadow: 0 4px 16px #00b4fc55;
+}
