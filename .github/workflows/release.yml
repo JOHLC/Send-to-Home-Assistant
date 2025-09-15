@@ -1,0 +1,24 @@
+name: Package and Release Extension
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Zip extension package
+        run: |
+          cd package
+          zip -r ../send-to-ha-extension-${{ github.ref_name }}.zip .
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: send-to-ha-extension-${{ github.ref_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
