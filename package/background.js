@@ -1,3 +1,84 @@
+// --- Context Menu Integration ---
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    // Parent menu
+    chrome.contextMenus.create({
+      id: 'send-to-ha-parent',
+      title: 'Send to Home Assistant',
+      contexts: ['page', 'selection', 'link'],
+    });
+    // Default sub-option
+    chrome.contextMenus.create({
+      id: 'send-to-ha-default',
+      parentId: 'send-to-ha-parent',
+      title: 'Default',
+      contexts: ['page', 'selection', 'link'],
+    });
+    // (Future sub-options can be added here)
+  });
+});
+
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!tab || !tab.id) return;
+  if (info.menuItemId === 'send-to-ha-default') {
+    // Prepare message payload
+    let payload = {
+      title: tab.title,
+      url: info.linkUrl || info.pageUrl || tab.url,
+      favicon: tab.favIconUrl || '',
+      selected: info.selectionText || '',
+      timestamp: new Date().toISOString()
+    };
+    chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
+      const haHost = result.haHost;
+      const ssl = typeof result.ssl === 'boolean' ? result.ssl : true;
+      const webhookId = result.webhookId;
+      const userName = result.userName;
+      const deviceName = result.deviceName;
+      if (!haHost || !webhookId) {
+        chrome.runtime.openOptionsPage();
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon.png',
+          title: 'Send to Home Assistant',
+          message: 'Please set your Home Assistant hostname and webhook ID in the extension options.'
+        });
+        return;
+      }
+      const webhookUrl = `${ssl ? 'https' : 'http'}://${haHost}/api/webhook/${webhookId}`;
+      // Compose data
+      const data = {
+        ...payload,
+        user: userName || '',
+        device: deviceName || ''
+      };
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      })
+      .then(() => {
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon.png',
+          title: 'Send to Home Assistant',
+          message: 'Sent successfully!'
+        });
+      })
+      .catch(() => {
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon.png',
+          title: 'Send to Home Assistant',
+          message: 'Failed to send.'
+        });
+      });
+    });
+  }
+  // (Future sub-options can be handled here)
+});
 // --- Extension update check (GitHub releases) ---
 const UPDATE_CHECK_KEY = 'lastUpdateCheck';
 const UPDATE_INFO_KEY = 'updateInfo';
