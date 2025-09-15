@@ -73,4 +73,3 @@ MIT
 ---  
 
 **Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/).  
-
