@@ -1,0 +1,35 @@
+# Node modules (if added for development)
+node_modules/
+
+# Development dependencies
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Build artifacts (if any)
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Extension package files
+*.zip
+*.crx
+*.pem
