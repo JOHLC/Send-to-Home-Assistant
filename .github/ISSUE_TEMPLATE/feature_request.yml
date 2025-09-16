@@ -1,0 +1,86 @@
+name: ✨ Feature Request
+description: Suggest an idea or enhancement for the extension
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees:
+  - JOHLC
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new feature! Please provide as much detail as possible to help us understand your idea.
+        
+        Before submitting, please:
+        - Search existing issues to avoid duplicates
+        - Consider if this aligns with the extension's core purpose
+  
+  - type: textarea
+    id: problem-description
+    attributes:
+      label: Problem or Use Case
+      description: Is your feature request related to a problem? Please describe the use case or problem you're trying to solve.
+      placeholder: I'm frustrated when... / I would like to be able to... / It would be helpful if...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+      placeholder: I would like the extension to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: I've also considered... / Another approach could be...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Low (nice to have)
+        - Medium (would be helpful)
+        - High (significantly improves workflow)
+        - Critical (blocking current use)
+    validations:
+      required: true
+
+  - type: textarea
+    id: home-assistant-integration
+    attributes:
+      label: Home Assistant Integration
+      description: How would this feature integrate with Home Assistant? What automations or workflows would it enable?
+      placeholder: This would allow me to create automations that...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or examples about the feature request.
+      placeholder: Any additional information that might help...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: This feature aligns with the extension's purpose of sending data to Home Assistant
+          required: true
+        - label: I have provided a clear description of the problem and proposed solution
+          required: true

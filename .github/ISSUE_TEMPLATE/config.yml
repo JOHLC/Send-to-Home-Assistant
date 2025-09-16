@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://github.com/JOHLC/Send-to-Home-Assistant/blob/main/README.md
+    about: Check the README for installation, configuration, and usage instructions
+  - name: 🏠 Home Assistant Community
+    url: https://community.home-assistant.io/
+    about: Get help with Home Assistant automation and integration questions
+  - name: 💰 Sponsor
+    url: https://github.com/sponsors/JOHLC
+    about: Support the development of this extension
