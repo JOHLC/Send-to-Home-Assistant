@@ -3,7 +3,7 @@
 #### Send the link to your phone
 
 ```yaml
-alias: Share to Home Assistant
+alias: Send to Home Assistant
 description: ""
 triggers:
   - trigger: webhook
@@ -16,7 +16,7 @@ triggers:
 conditions: []
 actions:
   - data:
-      title: Share to Home Assistant
+      title: Send to Home Assistant
       message: |
         Title: {{ trigger.json.title }}
         {{ trigger.json.selected or '' }} 
@@ -29,7 +29,7 @@ actions:
         importance: high
         ttl: 0
         priority: high
-        channel: Share to Home Assistant
+        channel: Send to Home Assistant
         subtitle: |
           Shared: {{ trigger.json.title }}
         actions:
