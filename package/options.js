@@ -14,6 +14,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     updateCheckToggle.addEventListener('change', () => {
       chrome.storage.local.set({updateCheckEnabled: updateCheckToggle.checked});
+      // Hide or show update status based on toggle
+      if (updateDiv) {
+        if (updateCheckToggle.checked) {
+          updateDiv.classList.remove('hidden');
+        } else {
+          updateDiv.classList.add('hidden');
+        }
+      }
     });
   }
   if (versionDiv && chrome.runtime && chrome.runtime.getManifest) {
@@ -23,14 +31,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // Show update status if available
+  // Show update status if available, and hide if toggle is off
   if (updateDiv && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get('updateInfo', (data) => {
+    chrome.storage.local.get(['updateInfo', 'updateCheckEnabled'], (data) => {
       const info = data.updateInfo;
+      const enabled = (typeof data.updateCheckEnabled === 'boolean') ? data.updateCheckEnabled : true;
+      if (!enabled) {
+        updateDiv.classList.add('hidden');
+      } else {
+        updateDiv.classList.remove('hidden');
+      }
       if (info && info.isNewer && info.latest && info.html_url) {
-  updateDiv.innerHTML = `<div class="update-available">New version available: <a href="${info.html_url}" target="_blank" rel="noopener noreferrer" class="link-blue">v${info.latest}</a></div>`;
+        updateDiv.innerHTML = `<div class="update-available">New version available: <a href="${info.html_url}" target="_blank" rel="noopener noreferrer" class="link-blue">v${info.latest}</a></div>`;
       } else if (info && !info.isNewer) {
-  updateDiv.innerHTML = `<div class="update-latest">You are using the latest version.</div>`;
+        updateDiv.innerHTML = `<div class="update-latest">You are using the latest version.</div>`;
       } else {
         updateDiv.innerHTML = '';
       }

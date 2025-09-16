@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Send to Home Assistant",
-  "version": "v2025.09.2-beta",
+  "version": "2025.09.2",
   "description": "Send the current page URL and title to your Home Assistant webhook.",
-  "permissions": ["storage", "scripting", "activeTab"],
+  "permissions": ["storage", "scripting", "activeTab", "contextMenus", "notifications"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
