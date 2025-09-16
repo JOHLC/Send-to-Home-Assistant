@@ -1,6 +1,6 @@
 # Send to Home Assistant – Chrome/Edge Extension
 
-<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon.png" alt="Send to Home Assistant Logo" width="200" />       
+<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/tags/v2025.09.2-beta1/package/icon.png" alt="Send to Home Assistant Logo" width="200" />       
 
 > <a class="github-button" href="https://github.com/JOHLC/Send-to-Home-Assistant" data-color-scheme="no-preference: dark; light: light; dark: dark;" data-size="large" aria-label="Download JOHLC/Send-to-Home-Assistant on GitHub">Visit/download on Github</a>
 
@@ -87,3 +87,4 @@ This extension collects the following data when you use it:
 
 **All data is sent only to your configured Home Assistant webhook and is never sent to any third party or external server.**
 No data is collected or stored by the extension author.
+
