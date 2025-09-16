@@ -1,90 +1,78 @@
 # Security Policy
 
+_Last updated: 2025-09-16_
+
 ## Supported Versions
 
-We actively support the latest version of the Send to Home Assistant extension. Please ensure you are using the most recent version before reporting security issues.
+We support the latest version of the Send to Home Assistant extension. Please ensure you are using the most recent release before reporting any security issues.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| Latest  | :white_check_mark: |
-| < Latest| :x:                |
+| Latest  | ✅                 |
+| Older   | ❌                 |
 
 ## Reporting a Vulnerability
 
-We take security seriously. If you discover a security vulnerability, please help us address it responsibly.
+**Do NOT create a public GitHub issue for security vulnerabilities.**
 
-### How to Report
-
-**Please do NOT create a public GitHub issue for security vulnerabilities.**
-
-Instead, please report security issues by:
-
-1. **Email**: Send details to the repository owner via GitHub's private vulnerability reporting feature
-2. **GitHub Security**: Use GitHub's "Report a vulnerability" feature (if available)
-3. **Private Contact**: Reach out through the sponsor/contact information in the repository
+Please report security issues using one of the following methods:
+- **GitHub Security Advisory**: Use GitHub’s “Report a vulnerability” feature on this repo.
 
 ### What to Include
 
-When reporting a security vulnerability, please include:
+- Clear description of the vulnerability
+- Impact (potential attacker actions)
+- Reproduction steps
+- Environment details (browser, extension, OS versions)
+- Proof of concept (if possible)
 
-- **Description**: Clear description of the vulnerability
-- **Impact**: What could an attacker achieve?
-- **Reproduction**: Step-by-step instructions to reproduce the issue
-- **Environment**: Browser version, extension version, and OS
-- **Proof of Concept**: If applicable, include a minimal example
+## Security Considerations
 
-### Security Considerations
-
-This extension handles sensitive data including:
-- URLs and page titles from your browsing
-- Selected text content
+This extension processes sensitive information:
+- URLs, page titles, selected text
 - Home Assistant webhook URLs and credentials
 - Browser extension permissions
 
-### Common Security Areas
+### Key Security Areas
 
-Please pay special attention to:
+- **XSS Prevention:** Data is sanitized before display ([test page](/tests/xss-test.html))
+- **Data Transmission:** Data is sent only to your configured Home Assistant instance
+- **Storage Security:** Configurations are stored securely in the browser
+- **Permissions:** Extension requests only the minimum required permissions
 
-- **XSS Prevention**: The extension sanitizes data before display (test with `/tests/xss-test.html`)
-- **Data Transmission**: All data is sent only to your configured Home Assistant instance
-- **Storage Security**: Configuration data is stored in browser's secure extension storage
-- **Permission Usage**: Extension only requests necessary permissions
+## Response Timeline
 
-### Response Timeline
+- **Acknowledgment:** Within 72 hours
+- **Assessment:** Within 1 week
+- **Resolution:** As soon as possible, depending on complexity
 
-- **Acknowledgment**: Within 48 hours
-- **Initial Assessment**: Within 1 week
-- **Resolution**: Varies based on complexity, but we aim for quick fixes
+## Responsible Disclosure & Safe Harbor
 
-### Safe Harbor
-
-We support responsible disclosure and will not pursue legal action against researchers who:
-
-- Report vulnerabilities through proper channels
-- Do not access or modify user data beyond what's necessary to demonstrate the vulnerability
-- Do not perform testing on others' systems without permission
-- Give us reasonable time to address issues before public disclosure
+We support responsible disclosure. No legal action will be taken against researchers who:
+- Report vulnerabilities through the channels above
+- Minimize impact to users and data
+- Avoid testing on others' systems without permission
+- Allow us reasonable time to resolve issues prior to public disclosure
 
 ## Security Best Practices for Users
 
-- **Use HTTPS**: Always configure Home Assistant with SSL/TLS enabled
-- **Keep Updated**: Install extension updates promptly
-- **Webhook Security**: Use long, random webhook IDs
-- **Network Security**: Ensure your Home Assistant instance is properly secured
-- **Review Permissions**: Regularly review extension permissions in your browser
+- Use HTTPS for your Home Assistant instance
+- Keep the extension updated
+- Use long, random webhook IDs
+- Secure your Home Assistant network
+- Regularly review extension permissions
 
 ## Privacy
 
-This extension:
-- **Does NOT** collect any personal data
-- **Does NOT** send data to third parties
-- **ONLY** sends data to your configured Home Assistant webhook
-- **Stores** configuration locally in browser's secure extension storage
+- No personal data is collected
+- No data sent to third parties
+- Data sent only to your configured Home Assistant webhook
+- Configuration is stored locally in secure browser storage
 
-For more details, see the Privacy Notice in the README.
+See the [Privacy Notice](README.md) for details.
 
 ## Contact
 
-For security-related questions or concerns, please use the reporting methods above rather than public issues.
+For security-related questions or concerns, please use the reporting methods above.
 
 Thank you for helping keep Send to Home Assistant secure!
