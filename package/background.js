@@ -207,7 +207,7 @@ chrome.action.onClicked.addListener(async(tab) => {
     await handleDirectSend(tab);
   } catch (error) {
     console.error('Direct send failed:', error);
-    const errorMessage = `Failed to send: ${error.message}`;
+    const errorMessage = `Failed to send: ${ExtensionUtils.escapeHTML(error.message)}`;
     ExtensionUtils.createNotification(errorMessage);
     lastSendStatus = { status: 'error', error: error.message };
   }
@@ -263,11 +263,11 @@ async function handleDirectSend(tab) {
     await injectPageAlert(tab.id, 'Link sent to Home Assistant!');
     
   } catch (error) {
-    ExtensionUtils.updateNotification(notifId, `Error: ${error.message}`);
+    ExtensionUtils.updateNotification(notifId, `Error: ${ExtensionUtils.escapeHTML(error.message)}`);
     lastSendStatus = { status: 'error', error: error.message };
     
     // Inject in-page alert as fallback
-    await injectPageAlert(tab.id, `Error sending to Home Assistant: ${error.message}`);
+    await injectPageAlert(tab.id, `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`);
   }
 }
 

@@ -192,7 +192,7 @@ function handleSave() {
     })
     .catch((error) => {
       console.error('Save failed:', error);
-      showStatus(error.message, 'error');
+      showStatus(escapeHTML(error.message), 'error');
     });
 }
 
@@ -218,7 +218,7 @@ function handleTest() {
     })
     .catch((error) => {
       console.error('Test failed:', error);
-      showStatus(error.message, 'error');
+      showStatus(escapeHTML(error.message), 'error');
     });
 }
 
@@ -391,7 +391,7 @@ function testWebhookAccessibility(config) {
       
       let message = 'Could not reach the webhook URL. Please check your network or URL.';
       if (error.message) {
-        message += ` (${error.message})`;
+        message += ` (${escapeHTML(error.message)})`;
       }
       throw new Error(message);
     });
@@ -418,7 +418,7 @@ function performWebhookTest(config) {
           let message = `Test failed: HTTP ${response.status}`;
         
           if (text) {
-            message += `: ${text}`;
+            message += `: ${escapeHTML(text)}`;
           } else if (response.status === 404) {
             message += ' (Webhook not found. Check your ID and host.)';
           } else if (response.status === 401 || response.status === 403) {
@@ -437,7 +437,7 @@ function performWebhookTest(config) {
     
       let message = 'Test failed: Could not reach the webhook URL. Please check your network or URL.';
       if (error.message) {
-        message += ` (${error.message})`;
+        message += ` (${escapeHTML(error.message)})`;
       }
       throw new Error(message);
     });
