@@ -44,7 +44,7 @@
   - Webhook endpoint: `https://<host>/api/webhook/<webhookId>`
   - See `config/automations.md` for automation YAML examples.
 - **Update Checks:**
-  - Background script checks GitHub releases for updates (can be disabled in options).
+  - Background script checks GitHub releases for updates (can be disabled in options)..
 
 ## Examples
 - **Sending a page:**
