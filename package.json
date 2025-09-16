@@ -1,0 +1,37 @@
+{
+  "name": "send-to-home-assistant",
+  "version": "2025.09.2",
+  "description": "Browser extension to send page information to Home Assistant webhooks",
+  "main": "package/manifest.json",
+  "scripts": {
+    "lint": "eslint package/*.js",
+    "lint:fix": "eslint package/*.js --fix",
+    "test": "echo \"Manual testing with tests/xss-test.html\"",
+    "validate": "node scripts/validate-manifest.js",
+    "package": "node scripts/package-extension.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JOHLC/Send-to-Home-Assistant.git"
+  },
+  "keywords": [
+    "browser-extension",
+    "home-assistant",
+    "webhook",
+    "automation",
+    "chrome-extension",
+    "edge-extension"
+  ],
+  "author": "JOHLC",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.57.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "browserslist": [
+    "Chrome >= 88",
+    "Edge >= 88"
+  ]
+}

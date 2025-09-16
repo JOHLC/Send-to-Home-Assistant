@@ -71,7 +71,7 @@ function handleContextMenuSend(info, tab) {
     if (!haHost || !webhookId) {
       chrome.runtime.openOptionsPage();
       ExtensionUtils.createNotification(
-        'Please set your Home Assistant hostname and webhook ID in the extension options.'
+        'Please set your Home Assistant hostname and webhook ID in the extension options.',
       );
       return;
     }
@@ -108,7 +108,8 @@ function handleContextMenuSend(info, tab) {
  */
 function checkForUpdate() {
   const now = Date.now();
-  const { UPDATE_CHECK_KEY, UPDATE_INFO_KEY, GITHUB_RELEASES_API, UPDATE_CHECK_INTERVAL } = ExtensionUtils.EXTENSION_CONFIG;
+  const { UPDATE_CHECK_KEY, UPDATE_INFO_KEY, UPDATE_CHECK_INTERVAL } = 
+    ExtensionUtils.EXTENSION_CONFIG;
   
   chrome.storage.local.get(['updateCheckEnabled', UPDATE_CHECK_KEY, UPDATE_INFO_KEY], (data) => {
     if (data.updateCheckEnabled === false) {
@@ -144,7 +145,8 @@ function checkForUpdate() {
  * @returns {Promise<object>} Release information
  */
 async function fetchLatestRelease() {
-  const response = await fetch(ExtensionUtils.EXTENSION_CONFIG.GITHUB_RELEASES_API);
+  const { GITHUB_RELEASES_API } = ExtensionUtils.EXTENSION_CONFIG;
+  const response = await fetch(GITHUB_RELEASES_API);
   if (!response.ok) {
     throw new Error(`GitHub API returned ${response.status}`);
   }
@@ -192,7 +194,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 /**
  * Handle extension icon clicks (direct sending)
  */
-chrome.action.onClicked.addListener(async (tab) => {
+chrome.action.onClicked.addListener(async(tab) => {
   // Check for restricted pages
   if (!tab || !tab.id || ExtensionUtils.isRestrictedPage(tab.url)) {
     const errorMessage = 'Cannot send from browser internal pages.';
@@ -321,7 +323,7 @@ async function injectPageAlert(tabId, message) {
     
     chrome.tabs.sendMessage(tabId, { 
       type: 'show-ha-alert', 
-      text: message 
+      text: message, 
     });
   } catch (error) {
     console.error('Failed to inject page alert:', error);

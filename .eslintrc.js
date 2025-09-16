@@ -13,10 +13,12 @@ module.exports = {
   },
   globals: {
     chrome: 'readonly',
+    ExtensionUtils: 'readonly',
+    importScripts: 'readonly',
   },
   rules: {
     // Code Quality
-    'no-console': 'warn',
+    'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
     'no-debugger': 'error',
     'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'prefer-const': 'error',
