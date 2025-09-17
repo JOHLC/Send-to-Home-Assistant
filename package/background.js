@@ -43,6 +43,13 @@ chrome.contextMenus.onClicked.addListener(async(info, tab) => {
     return;
   }
 
+  // Check for restricted pages first
+  if (ExtensionUtils.isRestrictedPage(tab.url)) {
+    const errorMessage = 'This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.';
+    ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
+    return;
+  }
+
   if (info.menuItemId === 'send-to-ha-default') {
     await handleContextMenuSend(info, tab);
   }
