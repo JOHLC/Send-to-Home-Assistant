@@ -132,22 +132,52 @@ async function getPageInfo(tabId, config) {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => {
-      // Get the largest favicon available
-      let favicon = '';
-      let maxSize = 0;
+      // Define format priorities for Android compatibility (lower number = higher priority)
+      const formatPriority = {
+        'png': 1,
+        'jpg': 2,
+        'jpeg': 2,
+        'webp': 3,
+        'ico': 4,
+        'svg': 5,  // SVG last as it may not be supported by all Android apps
+      };
+      
       const links = document.getElementsByTagName('link');
+      const candidates = [];
       
       for (let i = 0; i < links.length; i++) {
         const rel = links[i].rel;
         const href = links[i].href;
         
-        // Look for any rel containing 'icon'
-        if (rel && rel.toLowerCase().includes('icon') && href) {
-          // Try to parse sizes attribute if present
+        // Look for favicon-specific rel attributes (exclude apple-touch-icon and other device-specific icons)
+        if (rel && rel.toLowerCase().includes('icon') && href && !rel.toLowerCase().includes('apple')) {
+          // Extract format from URL or type attribute
+          let format = '';
+          const typeAttr = links[i].type;
+          if (typeAttr) {
+            const match = typeAttr.match(/image\/([a-zA-Z0-9-]+)/);
+            if (match) {
+              format = match[1].toLowerCase();
+            }
+          } else {
+            // Try to extract format from URL extension
+            const urlMatch = href.match(/\.(\w+)(\?.*)?$/);
+            if (urlMatch) {
+              format = urlMatch[1].toLowerCase();
+            }
+          }
+          
+          // Normalize x-icon to ico
+          if (format === 'x-icon') {
+            format = 'ico';
+          }
+          
+          // Get size information
           let size = 0;
           if (links[i].sizes && links[i].sizes.value) {
             const sizes = links[i].sizes.value.split(' ');
             for (const s of sizes) {
+              if (s === 'any') {continue;} // Skip 'any' size
               const parts = s.split('x');
               if (parts.length === 2) {
                 const n = parseInt(parts[0], 10);
@@ -158,15 +188,31 @@ async function getPageInfo(tabId, config) {
             }
           }
           
-          // If no sizes, guess 16, else use parsed size
+          // If no sizes, guess 16
           if (!size) {
             size = 16;
           }
-          if (size > maxSize) {
-            maxSize = size;
-            favicon = href;
-          }
+          
+          // Calculate priority score (lower is better)
+          // Format has more weight than size to prioritize mobile-compatible formats
+          const formatScore = formatPriority[format] || 10; // Unknown formats get low priority
+          const sizeScore = Math.max(0, 100 - size / 10); // Size has less impact on final score
+          const totalScore = formatScore * 1000 + sizeScore;
+          
+          candidates.push({
+            href,
+            format,
+            size,
+            score: totalScore,
+          });
         }
+      }
+      
+      // Sort candidates by score (lower is better) and get the best one
+      let favicon = '';
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a.score - b.score);
+        favicon = candidates[0].href;
       }
       
       // Fallback to /favicon.ico if nothing found
