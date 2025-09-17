@@ -276,7 +276,12 @@ function formatTimestamp(timestamp) {
  * @returns {boolean} True if restricted, false otherwise
  */
 function isRestrictedPage(url) {
-  return url.startsWith('chrome://') || url.startsWith('edge://');
+  if (!url) {return true;}
+  return url.startsWith('chrome://') || 
+         url.startsWith('edge://') || 
+         url.startsWith('extension://') ||
+         url.startsWith('moz-extension://') ||
+         url.startsWith('about:');
 }
 
 /**

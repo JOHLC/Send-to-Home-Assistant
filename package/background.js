@@ -55,11 +55,33 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
  * @param {object} tab - Tab information
  */
 function handleContextMenuSend(info, tab) {
+  // Validate and process favicon URL
+  let faviconUrl = tab.favIconUrl || chrome.runtime.getURL('icon-256.png');
+  
+  // Check for problematic favicon URLs that could cause issues
+  if (tab.favIconUrl) {
+    try {
+      const url = new URL(tab.favIconUrl);
+      if (url.protocol === 'file:' || 
+          url.hostname === '' || 
+          url.hostname === 'localhost' ||
+          url.hostname.endsWith('.local') ||
+          url.href.includes('404') ||
+          url.href.includes('nonexistent')) {
+        // These could cause issues, use extension icon instead
+        faviconUrl = chrome.runtime.getURL('icon-256.png');
+      }
+    } catch (error) {
+      // Invalid URL, fallback to extension icon
+      faviconUrl = chrome.runtime.getURL('icon-256.png');
+    }
+  }
+
   // Prepare message payload
   const payload = {
     title: tab.title,
     url: info.linkUrl || info.pageUrl || tab.url,
-    favicon: tab.favIconUrl || chrome.runtime.getURL('icon-256.png'),
+    favicon: faviconUrl,
     selected: info.selectionText || '',
     timestamp: new Date().toISOString(),
     user_agent: navigator.userAgent,
@@ -73,7 +95,7 @@ function handleContextMenuSend(info, tab) {
       ExtensionUtils.createNotification(
         'Please set your Home Assistant hostname and webhook ID in the extension options.',
         'send-to-ha-status',
-        'icon-256.png'
+        'icon-256.png',
       );
       return;
     }
@@ -101,7 +123,7 @@ function handleContextMenuSend(info, tab) {
       ExtensionUtils.createNotification(
         'Invalid configuration. Please check your settings.',
         'send-to-ha-status',
-        'icon-256.png'
+        'icon-256.png',
       );
     }
   });
@@ -201,7 +223,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 /**
  * Handle extension icon clicks (direct sending)
  */
-chrome.action.onClicked.addListener(async (tab) => {
+chrome.action.onClicked.addListener(async(tab) => {
   // Check for restricted pages
   if (!tab || !tab.id || ExtensionUtils.isRestrictedPage(tab.url)) {
     const errorMessage = 'Cannot send from browser internal pages.';
@@ -272,14 +294,14 @@ async function handleDirectSend(tab) {
     ExtensionUtils.updateNotification(
       notifId,
       `Error: ${ExtensionUtils.escapeHTML(error.message)}`,
-      'icon-256.png'
+      'icon-256.png',
     );
     lastSendStatus = { status: 'error', error: error.message };
 
     // Inject in-page alert as fallback
     await injectPageAlert(
       tab.id,
-      `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`
+      `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`,
     );
   }
 }

@@ -27,8 +27,119 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const msgDiv = document.getElementById('popupMsg');
 const okBtn = document.getElementById('okBtn');
-let autoCloseTimer = null;
-let userActive = false;
+
+/**
+ * Update the status message in the popup
+ * @param {string} message - The status message to display
+ */
+function updateStatus(message) {
+  if (msgDiv) {
+    msgDiv.textContent = message;
+  }
+}
+
+/**
+ * Hide the OK button
+ */
+function hideButton() {
+  if (okBtn) {
+    okBtn.classList.add('hidden');
+  }
+}
+
+/**
+ * Show the OK button
+ */
+function showButton() {
+  if (okBtn) {
+    okBtn.classList.remove('hidden');
+  }
+}
+
+/**
+ * Show preview of the sent data
+ * @param {object} pageInfo - The page information object
+ */
+function showPreview(pageInfo) {
+  const previewDiv = document.createElement('div');
+  previewDiv.className = 'preview';
+  
+  // Favicon row
+  const faviconRow = document.createElement('div');
+  faviconRow.className = 'preview-row preview-row-center';
+  
+  const faviconImg = document.createElement('img');
+  faviconImg.className = 'preview-favicon';
+  faviconImg.src = pageInfo.favicon || chrome.runtime.getURL('icon-256.png');
+  faviconImg.alt = 'Page icon';
+  
+  // Handle favicon load errors by falling back to extension icon
+  faviconImg.onerror = () => {
+    faviconImg.src = chrome.runtime.getURL('icon-256.png');
+    faviconImg.classList.add('preview-favicon-placeholder');
+  };
+  
+  faviconRow.appendChild(faviconImg);
+  previewDiv.appendChild(faviconRow);
+  
+  // Title row
+  const titleRow = document.createElement('div');
+  titleRow.className = 'preview-row';
+  
+  const titleLabel = document.createElement('div');
+  titleLabel.className = 'preview-label';
+  titleLabel.textContent = 'Title:';
+  
+  const titleValue = document.createElement('div');
+  titleValue.className = 'preview-value';
+  titleValue.textContent = pageInfo.title || 'No title';
+  
+  titleRow.appendChild(titleLabel);
+  titleRow.appendChild(titleValue);
+  previewDiv.appendChild(titleRow);
+  
+  // URL row
+  const urlRow = document.createElement('div');
+  urlRow.className = 'preview-row';
+  
+  const urlLabel = document.createElement('div');
+  urlLabel.className = 'preview-label';
+  urlLabel.textContent = 'URL:';
+  
+  const urlValue = document.createElement('div');
+  urlValue.className = 'preview-value preview-url';
+  urlValue.textContent = pageInfo.url || 'No URL';
+  
+  urlRow.appendChild(urlLabel);
+  urlRow.appendChild(urlValue);
+  previewDiv.appendChild(urlRow);
+  
+  // Selected text row (if any)
+  if (pageInfo.selected && pageInfo.selected.trim()) {
+    const selectedRow = document.createElement('div');
+    selectedRow.className = 'preview-row';
+    
+    const selectedLabel = document.createElement('div');
+    selectedLabel.className = 'preview-label';
+    selectedLabel.textContent = 'Selected:';
+    
+    const selectedValue = document.createElement('div');
+    selectedValue.className = 'preview-value';
+    selectedValue.textContent = pageInfo.selected.substring(0, 100) + (pageInfo.selected.length > 100 ? '...' : '');
+    
+    selectedRow.appendChild(selectedLabel);
+    selectedRow.appendChild(selectedValue);
+    previewDiv.appendChild(selectedRow);
+  }
+  
+  // Insert preview after the message div
+  if (msgDiv && msgDiv.parentNode) {
+    msgDiv.parentNode.insertBefore(previewDiv, msgDiv.nextSibling);
+  }
+  
+  // Add copy button for JSON payload
+  addCopyButton(pageInfo);
+}
 
 /**
  * Main function to send page data to Home Assistant
@@ -86,12 +197,17 @@ function getActiveTab() {
 }
 
 /**
- * Check if the page is restricted (chrome:// or edge:// pages)
+ * Check if the page is restricted (chrome://, edge://, extension:// pages)
  * @param {string} url - The page URL
  * @returns {boolean} True if restricted
  */
 function isRestrictedPage(url) {
-  return url.startsWith('chrome://') || url.startsWith('edge://');
+  if (!url) {return true;}
+  return url.startsWith('chrome://') || 
+         url.startsWith('edge://') || 
+         url.startsWith('extension://') ||
+         url.startsWith('moz-extension://') ||
+         url.startsWith('about:');
 }
 
 /**
@@ -193,9 +309,104 @@ async function getPageInfo(tabId, config) {
             size = 16;
           }
           
+          // Calculate priority score (lower is better)
+          // Format has more weight than size to prioritize mobile-compatible formats
+          const formatScore = formatPriority[format] || 10; // Unknown formats get low priority
+          const sizeScore = Math.max(0, 100 - size / 10); // Size has less impact on final score
+          const totalScore = formatScore * 1000 + sizeScore;
+          
+          candidates.push({
+            href,
+            format,
+            size,
+            score: totalScore,
+          });
+        }
+      }
+      
+      // Sort candidates by score (lower is better) and return the best one
+      let faviconUrl = '';
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a.score - b.score);
+        faviconUrl = candidates[0].href;
+      } else if (location.origin && !location.origin.startsWith('file:')) {
+        // Fallback to /favicon.ico if nothing found (but not for file:// URLs)
+        faviconUrl = location.origin + '/favicon.ico';
+      }
+      
+      // Return page info object
+      return {
+        title: document.title,
+        url: location.href,
+        favicon: faviconUrl,
+        selected: window.getSelection ? window.getSelection().toString() : '',
+        timestamp: new Date().toISOString(),
+        user_agent: navigator.userAgent,
+      };
+    },
+  });
+
+  if (!results || results.length === 0 || !results[0].result) {
+    throw new Error('Failed to collect page information');
+  }
+
+  const pageInfo = results[0].result;
+  
+  // Add user and device info from config
+  if (config.userName) {
+    pageInfo.user = config.userName;
+  }
+  if (config.deviceName) {
+    pageInfo.device = config.deviceName;
+  }
+  
+  // Validate favicon URL and fallback to extension icon if needed
+  if (pageInfo.favicon) {
+    try {
+      // Check for problematic favicon URLs that could cause CSP violations
+      const faviconUrl = new URL(pageInfo.favicon);
+      if (faviconUrl.protocol === 'file:' || 
+          faviconUrl.hostname === '' || 
+          faviconUrl.hostname === 'localhost' ||
+          faviconUrl.hostname.endsWith('.local')) {
+        // These could cause CSP violations, use extension icon instead
+        pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
+      }
+    } catch (error) {
+      // Invalid URL, fallback to extension icon
+      pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
+    }
+  } else {
+    // No favicon found, use extension icon
+    pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
+  }
+
+  return pageInfo;
+}
+
+/**
+ * Send data to webhook
+ * @param {string} webhookUrl - The webhook URL
+ * @param {object} data - Data to send
+ * @returns {Promise<Response>}
+ */
+async function sendToWebhook(webhookUrl, data) {
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  return response;
+}
+
 function addCopyButton(pageInfo) {
   let copyBtn = document.getElementById('copyJsonBtn');
-  if (copyBtn) return;
+  if (copyBtn) {return;}
 
   copyBtn = document.createElement('button');
   copyBtn.id = 'copyJsonBtn';
@@ -214,7 +425,7 @@ function addCopyButton(pageInfo) {
 
   copyWrapper.appendChild(copyBtn);
 
-  copyBtn.addEventListener('click', async () => {
+  copyBtn.addEventListener('click', async() => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(pageInfo, null, 2));
       copyBtn.textContent = 'Copied!';
@@ -230,7 +441,7 @@ function setupAutoClose() {
 
   function resetAutoCloseTimer() {
     userActive = true;
-    if (autoCloseTimer) clearTimeout(autoCloseTimer);
+    if (autoCloseTimer) {clearTimeout(autoCloseTimer);}
     autoCloseTimer = setTimeout(() => {
       if (!userActive) {
         window.close();
@@ -243,7 +454,7 @@ function setupAutoClose() {
 
   resetAutoCloseTimer();
   ['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(evt =>
-    window.addEventListener(evt, resetAutoCloseTimer, { passive: true })
+    window.addEventListener(evt, resetAutoCloseTimer, { passive: true }),
   );
 }
 
@@ -264,29 +475,6 @@ function handleError(error) {
   }
   
   updateStatus(`Error: ${message}`);
-}
-
-/**
- * Escape HTML to prevent XSS/code injection
- * @param {string} str - String to escape
- * @returns {string} Escaped string
- */
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/**
- * Format timestamp for display
- * @param {string} timestamp - ISO timestamp
- * @returns {string} Formatted timestamp
- */
-function formatTimestamp(timestamp) {
-  return timestamp.replace('T', ' ').replace('Z', '');
 }
 
 // --- Event Listeners ---
