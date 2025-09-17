@@ -193,171 +193,15 @@ async function getPageInfo(tabId, config) {
             size = 16;
           }
           
-          // Calculate priority score (lower is better)
-          // Format has more weight than size to prioritize mobile-compatible formats
-          const formatScore = formatPriority[format] || 10; // Unknown formats get low priority
-          const sizeScore = Math.max(0, 100 - size / 10); // Size has less impact on final score
-          const totalScore = formatScore * 1000 + sizeScore;
-          
-          candidates.push({
-            href,
-            format,
-            size,
-            score: totalScore,
-          });
-        }
-      }
-      
-      // Sort candidates by score (lower is better) and get the best one
-      let favicon = '';
-      if (candidates.length > 0) {
-        candidates.sort((a, b) => a.score - b.score);
-        favicon = candidates[0].href;
-      }
-      
-      // Fallback to /favicon.ico if nothing found
-      if (!favicon && location.origin) {
-        favicon = location.origin + '/favicon.ico';
-      }
-      
-      let selected = '';
-      if (window.getSelection) {
-        selected = window.getSelection().toString();
-      }
-      
-      return {
-        title: document.title,
-        url: window.location.href,
-        favicon,
-        selected,
-        timestamp: new Date().toISOString(),
-        user_agent: navigator.userAgent,
-      };
-    },
-  });
-
-  if (!results || !results[0] || !results[0].result) {
-    throw new Error('Could not get page info.');
-  }
-
-  const pageInfo = results[0].result;
-  
-  // Apply extension icon fallback if no favicon found
-  if (!pageInfo.favicon) {
-    pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
-  }
-  
-  // Add user information if provided
-  if (config.userName) {
-    pageInfo.user = config.userName;
-  }
-  if (config.deviceName) {
-    pageInfo.device = config.deviceName;
-  }
-
-  return pageInfo;
-}
-
-/**
- * Send data to the webhook
- * @param {string} webhookUrl - The webhook URL
- * @param {object} pageInfo - Page information to send
- * @returns {Promise} Fetch response
- */
-async function sendToWebhook(webhookUrl, pageInfo) {
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(pageInfo),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    let errorMsg = `HTTP ${response.status}`;
-    
-    if (text) {
-      errorMsg += `: ${text}`;
-    } else if (response.status === 404) {
-      errorMsg += ' (Webhook not found. Check your URL.)';
-    } else if (response.status === 401 || response.status === 403) {
-      errorMsg += ' (Unauthorized. Check your Home Assistant token or permissions.)';
-    }
-    
-    throw new Error(errorMsg);
-  }
-
-  return response;
-}
-
-/**
- * Update the status message
- * @param {string} message - Status message to display
- */
-function updateStatus(message) {
-  msgDiv.textContent = message;
-}
-
-/**
- * Show the OK button
- */
-function showButton() {
-  okBtn.style.display = '';
-}
-
-/**
- * Hide the OK button
- */
-function hideButton() {
-  okBtn.style.display = 'none';
-}
-/**
- * Show preview of sent data
- * @param {object} pageInfo - The page information that was sent
- */
-function showPreview(pageInfo) {
-  let preview = document.getElementById('preview');
-  if (!preview) {
-    preview = document.createElement('div');
-    preview.id = 'preview';
-    preview.className = 'preview';
-    msgDiv.parentNode.insertBefore(preview, okBtn);
-  }
-
-  // Build preview HTML with proper escaping
-  // Determine if favicon is a placeholder (extension icon)
-  const isPlaceholder = pageInfo.favicon && pageInfo.favicon.includes('icon-256.png');
-  const faviconClass = isPlaceholder ? 'preview-favicon preview-favicon-placeholder' : 'preview-favicon';
-  
-  const previewRows = [
-    `<div class="preview-row preview-row-center"><img src="${escapeHTML(pageInfo.favicon)}" alt="favicon" class="${faviconClass}"></div>`,
-    `<div class="preview-row"><span class="preview-label">Title:</span><span class="preview-value">${escapeHTML(pageInfo.title)}</span></div>`,
-    `<div class="preview-row"><span class="preview-label">URL:</span><span class="preview-value preview-url" title="${escapeHTML(pageInfo.url)}"><a href="${escapeHTML(pageInfo.url)}" target="_blank" rel="noopener noreferrer" class="link-blue">${escapeHTML(pageInfo.url)}</a></span></div>`,
-    pageInfo.selected ? `<div class="preview-row"><span class="preview-label">Selected:</span><span class="preview-value">${escapeHTML(pageInfo.selected)}</span></div>` : '',
-    `<div class="preview-row"><span class="preview-label">Timestamp:</span><span class="preview-value">${escapeHTML(formatTimestamp(pageInfo.timestamp))}</span></div>`,
-  ];
-
-  preview.innerHTML = '<div>' + previewRows.filter(Boolean).join('') + '</div>';
-
-  // Add copy JSON button
-  addCopyButton(pageInfo);
-}
-
-/**
- * Add copy to clipboard button
- * @param {object} pageInfo - The page information to copy
- */
 function addCopyButton(pageInfo) {
   let copyBtn = document.getElementById('copyJsonBtn');
-  if (copyBtn) {
-    return; // Button already exists
-  }
+  if (copyBtn) return;
 
   copyBtn = document.createElement('button');
   copyBtn.id = 'copyJsonBtn';
   copyBtn.className = 'copy-btn';
   copyBtn.textContent = 'Copy JSON';
 
-  // Create wrapper for centering
   let copyWrapper = document.getElementById('copyBtnWrapper');
   if (!copyWrapper) {
     copyWrapper = document.createElement('div');
@@ -369,58 +213,40 @@ function addCopyButton(pageInfo) {
   }
 
   copyWrapper.appendChild(copyBtn);
-  
-  copyBtn.addEventListener('click', async() => {
+
+  copyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(pageInfo, null, 2));
       copyBtn.textContent = 'Copied!';
-      setTimeout(() => {
-        copyBtn.textContent = 'Copy JSON';
-      }, 1500);
+      setTimeout(() => (copyBtn.textContent = 'Copy JSON'), 1500);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
-      // Fallback: select text for manual copy
-      const textArea = document.createElement('textarea');
-      textArea.value = JSON.stringify(pageInfo, null, 2);
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      copyBtn.textContent = 'Copied!';
     }
   });
 }
-/**
- * Setup auto-close functionality for the popup
- */
 function setupAutoClose() {
+  let autoCloseTimer = null;
+  let userActive = false;
+
+  function resetAutoCloseTimer() {
+    userActive = true;
+    if (autoCloseTimer) clearTimeout(autoCloseTimer);
+    autoCloseTimer = setTimeout(() => {
+      if (!userActive) {
+        window.close();
+      } else {
+        userActive = false;
+        resetAutoCloseTimer();
+      }
+    }, 15000);
+  }
+
   resetAutoCloseTimer();
-  
-  // Reset timer on user activity
-  ['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(evt => {
-    window.addEventListener(evt, resetAutoCloseTimer, { passive: true });
-  });
+  ['mousemove', 'keydown', 'mousedown', 'touchstart'].forEach(evt =>
+    window.addEventListener(evt, resetAutoCloseTimer, { passive: true })
+  );
 }
 
-/**
- * Reset the auto-close timer
- */
-function resetAutoCloseTimer() {
-  userActive = true;
-  
-  if (autoCloseTimer) {
-    clearTimeout(autoCloseTimer);
-  }
-  
-  autoCloseTimer = setTimeout(() => {
-    if (!userActive) {
-      window.close();
-    } else {
-      userActive = false;
-      resetAutoCloseTimer();
-    }
-  }, 15000); // 15 seconds
-}
 
 /**
  * Handle errors during the send process
