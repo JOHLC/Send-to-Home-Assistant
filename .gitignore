@@ -33,6 +33,3 @@ yarn-error.log*
 *.zip
 *.crx
 *.pem
-
-# Test files
-test-*.html
