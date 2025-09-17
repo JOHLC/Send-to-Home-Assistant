@@ -406,7 +406,7 @@ async function sendToWebhook(webhookUrl, data) {
 
 function addCopyButton(pageInfo) {
   let copyBtn = document.getElementById('copyJsonBtn');
-  if (copyBtn) {return;}
+  if (copyBtn) { return; }
 
   copyBtn = document.createElement('button');
   copyBtn.id = 'copyJsonBtn';
