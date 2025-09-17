@@ -3,26 +3,95 @@
 <head>
   <meta charset="UTF-8">
   <title><img src=x onerror=alert('XSS-title')> XSS Test</title>
+  <meta name="description" content="<script>alert('XSS-meta')</script>">
 </head>
 <body>
   <h1>XSS Injection Test Page</h1>
-  <p>Try using the extension on this page to test for code injection vulnerabilities.</p>
-  <h2>Malicious Content</h2>
-  <div id="malicious-title">Title: <img src=x onerror=alert('XSS-title-div')></div>
-  <div id="malicious-selection">
-    <p>Select this text: <span id="select-me">&lt;img src=x onerror=alert('XSS-selection')&gt;</span></p>
-  </div>
-  <div id="malicious-url">
-    <a href="http://example.com/?q=<script>alert('XSS-url')</script>">Malicious URL</a>
-  </div>
-  <div id="malicious-html">
-    <p>HTML payload: <span>&lt;script&gt;alert('XSS-html')&lt;/script&gt;</span></p>
-  </div>
-  <p>Instructions:</p>
+  <p>This page is designed to test the Send to Home Assistant extension for XSS vulnerabilities.</p>
+  
+  <h2>Test Instructions</h2>
   <ol>
-    <li>Try using the extension on this page.</li>
-    <li>Check the popup preview for any alert boxes or rendered HTML.</li>
-    <li>Check the Home Assistant payload for escaped content.</li>
+    <li>Use the extension on this page by clicking the extension icon</li>
+    <li>Right-click and use "Send to Home Assistant" context menu</li>
+    <li>Check the popup preview for any alert boxes or unescaped HTML</li>
+    <li>Verify that the Home Assistant payload contains properly escaped content</li>
+    <li>Test with selected text containing malicious content</li>
   </ol>
+  
+  <h2>Malicious Content Tests</h2>
+  
+  <h3>Title Injection</h3>
+  <div id="malicious-title">Title contains: <img src=x onerror=alert('XSS-title-div')></div>
+  
+  <h3>Selection Injection</h3>
+  <div id="malicious-selection">
+    <p>Select this text: <span id="select-me" onmouseover="alert('XSS-mouseover')">&lt;img src=x onerror=alert('XSS-selection')&gt;<script>alert('XSS-script-tag')</script></span></p>
+    <p>Also try this: <span>javascript:alert('XSS-javascript')</span></p>
+  </div>
+  
+  <h3>URL Injection</h3>
+  <div id="malicious-url">
+    <a href="http://example.com/?q=<script>alert('XSS-url')</script>&param=<img src=x onerror=alert('XSS-url-img')>">Link with malicious URL parameters</a>
+  </div>
+  
+  <h3>HTML Payload</h3>
+  <div id="malicious-html">
+    <p>HTML payload test: <span>&lt;script&gt;alert('XSS-html')&lt;/script&gt;</span></p>
+    <p>Event handler test: <span onload="alert('XSS-onload')" onclick="alert('XSS-onclick')">&lt;div onclick="alert('XSS')"&gt;Click me&lt;/div&gt;</span></p>
+  </div>
+  
+  <h3>Special Characters</h3>
+  <div id="special-chars">
+    <p>Test with special characters: &amp;&lt;&gt;"'</p>
+    <p>Unicode test: \u003cscript\u003ealert('XSS-unicode')\u003c/script\u003e</p>
+    <p>Base64 test: PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=</p>
+  </div>
+  
+  <h3>Expected Behavior</h3>
+  <div style="background: #f0f0f0; padding: 1em; margin: 1em 0; border-radius: 5px;">
+    <h4>✅ Expected (Safe):</h4>
+    <ul>
+      <li>No JavaScript alerts should be triggered</li>
+      <li>All HTML should be properly escaped in the preview</li>
+      <li>Malicious content should be displayed as text, not executed</li>
+      <li>The extension should function normally without errors</li>
+    </ul>
+    
+    <h4>❌ Security Issues (Report if you see these):</h4>
+    <ul>
+      <li>JavaScript alert dialogs appearing</li>
+      <li>Unescaped HTML being rendered in the preview</li>
+      <li>Script execution from page content</li>
+      <li>Extension errors or crashes</li>
+    </ul>
+  </div>
+  
+  <h2>Test Results</h2>
+  <div id="test-results" style="background: #e8f4f8; padding: 1em; margin: 1em 0; border-radius: 5px;">
+    <p><strong>After testing, you should see:</strong></p>
+    <ul>
+      <li>Extension popup shows escaped content (e.g., &amp;lt;script&amp;gt; instead of &lt;script&gt;)</li>
+      <li>No JavaScript execution from page content</li>
+      <li>All malicious payloads rendered as safe text</li>
+    </ul>
+  </div>
+  
+  <!-- Hidden elements for additional testing -->
+  <div style="display: none;">
+    <img src="x" onerror="alert('XSS-hidden-img')">
+    <iframe src="javascript:alert('XSS-iframe')"></iframe>
+    <object data="javascript:alert('XSS-object')"></object>
+  </div>
+  
+  <script>
+    // This script should not affect the extension's security
+    console.log('XSS test page loaded');
+    
+    // Add some dynamic content that might trigger XSS
+    document.addEventListener('DOMContentLoaded', function() {
+      // This should be handled safely by the extension
+      document.title = document.title + '<script>alert("XSS-dynamic")</script>';
+    });
+  </script>
 </body>
 </html>
