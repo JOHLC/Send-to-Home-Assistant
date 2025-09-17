@@ -134,12 +134,12 @@ async function getPageInfo(tabId, config) {
     func: () => {
       // Define format priorities for Android compatibility (lower number = higher priority)
       const formatPriority = {
-        'png': 1,
-        'jpg': 2,
-        'jpeg': 2,
-        'webp': 3,
-        'ico': 4,
-        'svg': 5,  // SVG last as it may not be supported by all Android apps
+        'png': 1,   // PNG is best supported format for Android notifications
+        'jpg': 2,   // JPEG is well supported 
+        'jpeg': 2,  // JPEG alternate extension
+        'webp': 3,  // WEBP is modern and well supported
+        'ico': 4,   // ICO is widely supported but often smaller
+        'svg': 10,  // SVG not supported by Android companion app notifications
       };
       
       const links = document.getElementsByTagName('link');
