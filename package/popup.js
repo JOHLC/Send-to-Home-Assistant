@@ -41,37 +41,26 @@ async function sendToHA() {
       throw new Error('No active tab found');
     }
 
-    if (!tab.id || isRestrictedPage(tab.url)) {
-      throw new Error('This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.');
-    }
-
-    const config = await getStorageConfig();
-    if (!config.haHost || !config.webhookId) {
-      updateStatus('Please set your Home Assistant hostname and webhook ID in the extension options.');
-      showButton();
-      chrome.runtime.openOptionsPage();
-      return;
-    }
-
-    const webhookUrl = createWebhookUrl(config.haHost, config.ssl, config.webhookId);
-    const pageInfo = await getPageInfo(tab.id, config);
-    
-    await sendToWebhook(webhookUrl, pageInfo);
-    
-    // Success - show both notification AND preview
-    updateStatus('Link sent to Home Assistant!');
-    
-    // Show HTML5 notification
-    chrome.notifications.create('send-to-ha-status', {
-      type: 'basic',
-      iconUrl: 'icon-256.png',
-      title: 'Send to Home Assistant',
-      message: 'Sent to Home Assistant!',
+    // Use unified sendToHomeAssistant function with popup-specific callbacks
+    await ExtensionUtils.sendToHomeAssistant({
+      tab,
+      onProgress: (message) => {
+        updateStatus(message);
+      },
+      onSuccess: (pageInfo) => {
+        updateStatus('Link sent to Home Assistant!');
+        showPreview(pageInfo);
+        setupAutoClose();
+        showButton();
+      },
+      onError: (error) => {
+        console.error('Send to HA failed:', error);
+        handleError(error);
+        showButton();
+      },
+      showNotifications: true,
+      notificationId: 'send-to-ha-status',
     });
-    
-    showPreview(pageInfo);
-    setupAutoClose();
-    showButton();
 
   } catch (error) {
     console.error('Send to HA failed:', error);
@@ -92,213 +81,12 @@ function getActiveTab() {
   });
 }
 
-/**
- * Check if the page is restricted (chrome:// or edge:// pages)
- * @param {string} url - The page URL
- * @returns {boolean} True if restricted
- */
-function isRestrictedPage(url) {
-  if (!url) {
-    return true;
-  }
-  return url.startsWith('chrome://') || 
-         url.startsWith('edge://') ||
-         url.startsWith('extension://') ||
-         url.startsWith('moz-extension://') ||
-         url.startsWith('chrome-extension://');
-}
-
-/**
- * Get configuration from storage
- * @returns {Promise<object>} Configuration object
- */
-function getStorageConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
-      resolve({
-        haHost: result.haHost,
-        ssl: typeof result.ssl === 'boolean' ? result.ssl : true,
-        webhookId: result.webhookId,
-        userName: result.userName,
-        deviceName: result.deviceName,
-      });
-    });
-  });
-}
-
-/**
- * Create webhook URL from configuration
- * @param {string} host - The host
- * @param {boolean} ssl - Whether to use SSL
- * @param {string} webhookId - The webhook ID
- * @returns {string} Complete webhook URL
- */
-function createWebhookUrl(host, ssl, webhookId) {
-  return `${ssl ? 'https' : 'http'}://${host}/api/webhook/${webhookId}`;
-}
-/**
- * Get page information from the active tab
- * @param {number} tabId - The tab ID
- * @param {object} config - Configuration object
- * @returns {Promise<object>} Page information object
- */
-async function getPageInfo(tabId, config) {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: () => {
-      // Get favicon with CSP fallback support
-      function getFaviconWithFallback() {
-        const links = document.getElementsByTagName('link');
-        
-        // Define format priorities for Android compatibility (lower number = higher priority)
-        const formatPriority = {
-          'png': 1,   // PNG is best supported format for Android notifications
-          'jpg': 2,   // JPEG is well supported 
-          'jpeg': 2,  // JPEG alternate extension
-          'webp': 3,  // WEBP is modern and well supported
-          'ico': 4,   // ICO is widely supported but often smaller
-          'svg': 10,  // SVG not supported by Android companion app notifications
-        };
-        
-        // Store candidates with their priority scores
-        const candidates = [];
-        
-        for (let i = 0; i < links.length; i++) {
-          const rel = links[i].rel;
-          const href = links[i].href;
-          
-          // Look for favicon-specific rel attributes (exclude apple-touch-icon and other device-specific icons)
-          if (rel && rel.toLowerCase().includes('icon') && href && !rel.toLowerCase().includes('apple')) {
-            // Skip file:// URLs as they're blocked by CSP
-            if (href.startsWith('file://')) {
-              continue;
-            }
-            
-            // Extract format from URL or type attribute
-            let format = '';
-            const typeAttr = links[i].type;
-            if (typeAttr) {
-              const match = typeAttr.match(/image\/([a-zA-Z0-9-]+)/);
-              if (match) {
-                format = match[1].toLowerCase();
-              }
-            } else {
-              // Try to extract format from URL extension
-              const urlMatch = href.match(/\.(\w+)(\?.*)?$/);
-              if (urlMatch) {
-                format = urlMatch[1].toLowerCase();
-              }
-            }
-            
-            // Normalize x-icon to ico
-            if (format === 'x-icon') {
-              format = 'ico';
-            }
-            
-            // Get size information
-            let size = 0;
-            if (links[i].sizes && links[i].sizes.value) {
-              const sizes = links[i].sizes.value.split(' ');
-              for (const s of sizes) {
-                if (s === 'any') {continue;} // Skip 'any' size
-                const parts = s.split('x');
-                if (parts.length === 2) {
-                  const n = parseInt(parts[0], 10);
-                  if (n > size) {
-                    size = n;
-                  }
-                }
-              }
-            }
-            
-            // If no sizes, guess 16
-            if (!size) {
-              size = 16;
-            }
-            
-            // Calculate priority score (lower is better)
-            // Format has more weight than size to prioritize mobile-compatible formats
-            const formatScore = formatPriority[format] || 10; // Unknown formats get low priority
-            const sizeScore = Math.max(0, 100 - size / 10); // Size has less impact on final score
-            const totalScore = formatScore * 1000 + sizeScore;
-            
-            candidates.push({
-              href,
-              format,
-              size,
-              score: totalScore,
-            });
-          }
-        }
-        
-        // Sort candidates by score (lower is better) and return the best one
-        if (candidates.length > 0) {
-          candidates.sort((a, b) => a.score - b.score);
-          return candidates[0].href;
-        }
-        
-        // Fallback for non-file:// URLs
-        if (location.origin && !location.protocol.startsWith('file')) {
-          return location.origin + '/favicon.ico';
-        }
-        
-        // For file:// URLs or if nothing found, return empty string
-        // The extension will use its own icon as fallback
-        return '';
-      }
-      
-      return {
-        title: document.title,
-        url: window.location.href,
-        favicon: getFaviconWithFallback(),
-        selected: window.getSelection().toString(),
-        timestamp: new Date().toISOString(),
-        user_agent: navigator.userAgent,
-      };
-    },
-  });
-
-  if (!results || !results[0] || !results[0].result) {
-    throw new Error('Could not get page info.');
-  }
-
-  const pageInfo = results[0].result;
-  
-  // Use extension icon as fallback for empty favicon (CSP-blocked or not found)
-  if (!pageInfo.favicon) {
-    pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
-  }
-
-  // Add user and device information
-  if (config.userName) {
-    pageInfo.user = config.userName;
-  }
-  if (config.deviceName) {
-    pageInfo.device = config.deviceName;
-  }
-
-  return pageInfo;
-}
-
-/**
- * Send data to webhook
- * @param {string} webhookUrl - The webhook URL
- * @param {object} data - Data to send
- * @returns {Promise<Response>}
- */
-async function sendToWebhook(webhookUrl, data) {
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  return response;
-}
+// Removed duplicate functions - using ExtensionUtils versions instead:
+// - isRestrictedPage() -> ExtensionUtils.isRestrictedPage()  
+// - getStorageConfig() -> ExtensionUtils.getStorageConfig()
+// - createWebhookUrl() -> ExtensionUtils.createWebhookUrl()
+// - getPageInfo() -> ExtensionUtils.createPageInfo() (via sendToHomeAssistant)
+// - sendToWebhook() -> ExtensionUtils.sendToWebhook() (via sendToHomeAssistant)
 
 /**
  * Update status message in popup
@@ -335,7 +123,7 @@ function showPreview(pageInfo) {
   titleRow.className = 'preview-row';
   titleRow.innerHTML = `
     <span class="preview-label">Title:</span>
-    <span class="preview-value">${escapeHTML(pageInfo.title)}</span>
+    <span class="preview-value">${ExtensionUtils.escapeHTML(pageInfo.title)}</span>
   `;
   previewDiv.appendChild(titleRow);
   
@@ -345,7 +133,7 @@ function showPreview(pageInfo) {
   urlRow.innerHTML = `
     <span class="preview-label">URL:</span>
     <span class="preview-value">
-      <a href="${escapeHTML(pageInfo.url)}" target="_blank" class="preview-url link-blue">${escapeHTML(pageInfo.url)}</a>
+      <a href="${ExtensionUtils.escapeHTML(pageInfo.url)}" target="_blank" class="preview-url link-blue">${ExtensionUtils.escapeHTML(pageInfo.url)}</a>
     </span>
   `;
   previewDiv.appendChild(urlRow);
@@ -355,7 +143,7 @@ function showPreview(pageInfo) {
   faviconRow.className = 'preview-row preview-row-center';
   faviconRow.innerHTML = `
     <span class="preview-label">Favicon:</span>
-    <img src="${escapeHTML(pageInfo.favicon)}" 
+    <img src="${ExtensionUtils.escapeHTML(pageInfo.favicon)}" 
          alt="favicon" 
          class="preview-favicon"
          onerror="this.src='${chrome.runtime.getURL('icon-256.png')}'; this.classList.add('preview-favicon-placeholder');">
@@ -368,7 +156,7 @@ function showPreview(pageInfo) {
     selectedRow.className = 'preview-row';
     selectedRow.innerHTML = `
       <span class="preview-label">Selected:</span>
-      <span class="preview-value">${escapeHTML(pageInfo.selected)}</span>
+      <span class="preview-value">${ExtensionUtils.escapeHTML(pageInfo.selected)}</span>
     `;
     previewDiv.appendChild(selectedRow);
   }
@@ -378,7 +166,7 @@ function showPreview(pageInfo) {
   timestampRow.className = 'preview-row';
   timestampRow.innerHTML = `
     <span class="preview-label">Time:</span>
-    <span class="preview-value">${formatTimestamp(pageInfo.timestamp)}</span>
+    <span class="preview-value">${ExtensionUtils.formatTimestamp(pageInfo.timestamp)}</span>
   `;
   previewDiv.appendChild(timestampRow);
   
@@ -461,29 +249,6 @@ function handleError(error) {
   }
   
   updateStatus(`Error: ${message}`);
-}
-
-/**
- * Escape HTML to prevent XSS/code injection
- * @param {string} str - String to escape
- * @returns {string} Escaped string
- */
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/**
- * Format timestamp for display
- * @param {string} timestamp - ISO timestamp
- * @returns {string} Formatted timestamp
- */
-function formatTimestamp(timestamp) {
-  return timestamp.replace('T', ' ').replace('Z', '');
 }
 
 // --- Event Listeners ---
