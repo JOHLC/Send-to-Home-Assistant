@@ -43,28 +43,23 @@ async function sendToHA() {
       throw new Error('No active tab found');
     }
 
-    if (!tab.id || isRestrictedPage(tab.url)) {
-      throw new Error('Cannot send from browser internal pages.');
-    }
+    // Use the unified sending function
+    const result = await ExtensionUtils.sendToHomeAssistant({
+      tab,
+      showNotifications: false, // Popup handles its own UI feedback
+      onProgress: (message) => updateStatus(message),
+    });
 
-    const config = await getStorageConfig();
-    if (!config.haHost || !config.webhookId) {
-      updateStatus('Please set your Home Assistant hostname and webhook ID in the extension options.');
+    if (result.status === 'sent') {
+      // Success - show preview and setup auto-close
+      updateStatus('Link sent to Home Assistant!');
+      showPreview(result.data);
+      setupAutoClose();
       showButton();
-      chrome.runtime.openOptionsPage();
-      return;
+    } else if (result.status === 'error') {
+      handleError(new Error(result.error));
+      showButton();
     }
-
-    const webhookUrl = createWebhookUrl(config.haHost, config.ssl, config.webhookId);
-    const pageInfo = await getPageInfo(tab.id, config);
-    
-    await sendToWebhook(webhookUrl, pageInfo);
-    
-    // Success - show preview and setup auto-close
-    updateStatus('Link sent to Home Assistant!');
-    showPreview(pageInfo);
-    setupAutoClose();
-    showButton();
 
   } catch (error) {
     console.error('Send to HA failed:', error);
