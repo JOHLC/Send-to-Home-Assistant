@@ -244,7 +244,7 @@ async function getPageInfo(tabId, config) {
   
   // Apply extension icon fallback if no favicon found
   if (!pageInfo.favicon) {
-    pageInfo.favicon = chrome.runtime.getURL('icon.png');
+    pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
   }
   
   // Add user information if provided
@@ -325,7 +325,7 @@ function showPreview(pageInfo) {
 
   // Build preview HTML with proper escaping
   // Determine if favicon is a placeholder (extension icon)
-  const isPlaceholder = pageInfo.favicon && pageInfo.favicon.includes('icon.png');
+  const isPlaceholder = pageInfo.favicon && pageInfo.favicon.includes('icon-256.png');
   const faviconClass = isPlaceholder ? 'preview-favicon preview-favicon-placeholder' : 'preview-favicon';
   
   const previewRows = [

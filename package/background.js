@@ -59,7 +59,7 @@ function handleContextMenuSend(info, tab) {
   const payload = {
     title: tab.title,
     url: info.linkUrl || info.pageUrl || tab.url,
-    favicon: tab.favIconUrl || chrome.runtime.getURL('icon.png'),
+    favicon: tab.favIconUrl || chrome.runtime.getURL('icon-256.png'),
     selected: info.selectionText || '',
     timestamp: new Date().toISOString(),
     user_agent: navigator.userAgent,

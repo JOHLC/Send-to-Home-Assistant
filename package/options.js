@@ -452,7 +452,7 @@ function createTestPayload(config) {
   const payload = {
     title: 'Test from extension',
     url: window.location.origin,
-    favicon: 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon.png',
+    favicon: 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon-256.png',
     selected: 'Sample selected text',
     timestamp: new Date().toISOString(),
     user_agent: navigator.userAgent,

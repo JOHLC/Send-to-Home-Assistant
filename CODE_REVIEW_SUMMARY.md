@@ -73,7 +73,7 @@ package/
 ├── popup.html           # Popup UI
 ├── options.html         # Options page
 ├── style.css            # Shared styles
-└── icon.png            # Extension icon
+└── icon-256.png            # Extension icon
 
 scripts/                 # NEW: Development scripts
 ├── validate-manifest.js # Manifest validation

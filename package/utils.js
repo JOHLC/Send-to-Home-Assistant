@@ -23,7 +23,7 @@ const EXTENSION_CONFIG = {
  */
 const NOTIFICATION_CONFIG = {
   type: 'basic',
-  iconUrl: 'icon.png',
+  iconUrl: 'icon-256.png',
   title: 'Send to Home Assistant',
 };
 
@@ -230,7 +230,7 @@ function getFavicon() {
   }
   
   // Final fallback to extension icon
-  return chrome.runtime.getURL('icon.png');
+  return chrome.runtime.getURL('icon-256.png');
 }
 
 /**

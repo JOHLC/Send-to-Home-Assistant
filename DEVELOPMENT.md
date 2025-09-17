@@ -67,7 +67,7 @@ package/
 ├── utils.js             # Shared utilities
 ├── style.css            # Shared styles
 ├── inpage-alert.js      # Injected content script
-└── icon.png            # Extension icon
+└── icon-256.png            # Extension icon
 ```
 
 ### Coding Patterns

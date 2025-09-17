@@ -65,7 +65,7 @@ function createPackage() {
     'utils.js',
     'inpage-alert.js',
     'style.css',
-    'icon.png'
+    'icon-256.png'
   ];
 
   console.log('📂 Including files:');
