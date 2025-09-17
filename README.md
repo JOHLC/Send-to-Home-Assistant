@@ -1,6 +1,6 @@
 # Send to Home Assistant – Chrome/Edge Extension
 
-<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/tags/v2025.09.2-beta1/package/icon-256.png" alt="Send to Home Assistant Logo" width="200" />
+<img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/v2025.09.2-beta/assets/icon.webp" alt="Send to Home Assistant Logo" width="250" />
 
 [![Visit/download on Github](https://img.shields.io/badge/GitHub-Download-blue?logo=github)](https://github.com/JOHLC/Send-to-Home-Assistant) ![GitHub Release](https://img.shields.io/github/v/release/JOHLC/send-to-home-assistant) ![GitHub Release Date](https://img.shields.io/github/release-date/JOHLC/send-to-home-assistant?label=Latest%20release)
  ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/JOHLC/send-to-home-assistant/total) ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/JOHLC/send-to-home-assistant) ![GitHub Sponsors](https://img.shields.io/github/sponsors/JOHLC)
@@ -132,4 +132,5 @@ MIT
 **Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/)
 
 ---
+
 
