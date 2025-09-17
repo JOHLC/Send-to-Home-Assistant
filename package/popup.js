@@ -220,7 +220,7 @@ function addCopyButton(pageInfo) {
       copyBtn.textContent = 'Copied!';
       setTimeout(() => (copyBtn.textContent = 'Copy JSON'), 1500);
     } catch (error) {
-      console.error('Clipboard failed:', error);
+      console.error('Failed to copy to clipboard:', error);
     }
   });
 }
