@@ -441,7 +441,7 @@ function setupAutoClose() {
 
   function resetAutoCloseTimer() {
     userActive = true;
-    if (autoCloseTimer) {clearTimeout(autoCloseTimer);}
+    if (autoCloseTimer) { clearTimeout(autoCloseTimer); }
     autoCloseTimer = setTimeout(() => {
       if (!userActive) {
         window.close();
