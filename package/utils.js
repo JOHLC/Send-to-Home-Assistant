@@ -276,7 +276,13 @@ function formatTimestamp(timestamp) {
  * @returns {boolean} True if restricted, false otherwise
  */
 function isRestrictedPage(url) {
-  return url.startsWith('chrome://') || url.startsWith('edge://');
+  if (!url) {
+    return true;
+  }
+  return url.startsWith('chrome://') || 
+         url.startsWith('edge://') || 
+         url.startsWith('moz-extension://') ||
+         url.startsWith('chrome-extension://');
 }
 
 /**
@@ -295,6 +301,168 @@ function debounce(func, wait) {
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
   };
+}
+
+/**
+ * Gets configuration from storage with defaults
+ * @returns {Promise<object>} Configuration object
+ */
+function getStorageConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
+      resolve({
+        haHost: result.haHost,
+        ssl: typeof result.ssl === 'boolean' ? result.ssl : true,
+        webhookId: result.webhookId,
+        userName: result.userName,
+        deviceName: result.deviceName,
+      });
+    });
+  });
+}
+
+/**
+ * Sends data to webhook with proper error handling
+ * @param {string} webhookUrl - The webhook URL
+ * @param {object} data - Data to send
+ * @returns {Promise<Response>}
+ */
+async function sendToWebhook(webhookUrl, data) {
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  return response;
+}
+
+/**
+ * Unified function to send page information to Home Assistant
+ * Handles both context menu and direct sending scenarios
+ * @param {object} options - Configuration options
+ * @param {object} options.tab - Tab information
+ * @param {object} [options.contextInfo] - Context menu info (for right-click)
+ * @param {Function} [options.onProgress] - Progress callback (message) => void
+ * @param {Function} [options.onSuccess] - Success callback (data) => void
+ * @param {Function} [options.onError] - Error callback (error) => void
+ * @param {boolean} [options.showNotifications=true] - Whether to show browser notifications
+ * @param {string} [options.notificationId='send-to-ha-status'] - Notification ID
+ * @returns {Promise<object>} Result object with status and data
+ */
+async function sendToHomeAssistant(options) {
+  const {
+    tab,
+    contextInfo,
+    onProgress,
+    onSuccess,
+    onError,
+    showNotifications = true,
+    notificationId = 'send-to-ha-status',
+  } = options;
+
+  // Validate inputs
+  if (!tab || !tab.id) {
+    const error = new Error('Invalid tab information');
+    if (onError) onError(error);
+    return { status: 'error', error: error.message };
+  }
+
+  if (isRestrictedPage(tab.url)) {
+    const error = new Error('Cannot send from browser internal pages.');
+    if (onError) onError(error);
+    if (showNotifications) {
+      createNotification(error.message, notificationId, 'icon-256.png');
+    }
+    return { status: 'error', error: error.message };
+  }
+
+  try {
+    // Get configuration
+    const config = await getStorageConfig();
+
+    if (!config.haHost || !config.webhookId) {
+      const errorMessage = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
+      chrome.runtime.openOptionsPage();
+      if (showNotifications) {
+        createNotification(errorMessage, notificationId, 'icon-256.png');
+      }
+      if (onError) onError(new Error(errorMessage));
+      return { status: 'error', error: 'No webhook host or ID set.' };
+    }
+
+    // Create webhook URL
+    const webhookUrl = createWebhookUrl(config.haHost, config.ssl, config.webhookId);
+
+    // Show progress
+    if (onProgress) onProgress('Sending to Home Assistant...');
+    if (showNotifications) {
+      createNotification('Sending to Home Assistant...', notificationId, 'icon-256.png');
+    }
+
+    let pageInfo;
+
+    if (contextInfo) {
+      // Context menu scenario - manually build payload
+      pageInfo = {
+        title: tab.title,
+        url: contextInfo.linkUrl || contextInfo.pageUrl || tab.url,
+        favicon: tab.favIconUrl || chrome.runtime.getURL('icon-256.png'),
+        selected: contextInfo.selectionText || '',
+        timestamp: new Date().toISOString(),
+        user_agent: navigator.userAgent,
+      };
+    } else {
+      // Direct send scenario - get page info via scripting
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: createPageInfo,
+      });
+
+      if (!results || !results[0] || !results[0].result) {
+        throw new Error('Could not get page info.');
+      }
+
+      pageInfo = results[0].result;
+    }
+
+    // Add user and device information
+    if (config.userName) {
+      pageInfo.user = config.userName;
+    }
+    if (config.deviceName) {
+      pageInfo.device = config.deviceName;
+    }
+
+    // Send to webhook
+    await sendToWebhook(webhookUrl, pageInfo);
+
+    // Success handling
+    const successMessage = 'Sent to Home Assistant!';
+    if (onProgress) onProgress(successMessage);
+    if (showNotifications) {
+      updateNotification(notificationId, successMessage, 'icon-256.png');
+    }
+    if (onSuccess) onSuccess(pageInfo);
+
+    return { status: 'sent', data: pageInfo };
+
+  } catch (error) {
+    console.error('Send to Home Assistant failed:', error);
+    
+    const errorMessage = `Error: ${escapeHTML(error.message)}`;
+    if (onProgress) onProgress(errorMessage);
+    if (showNotifications) {
+      updateNotification(notificationId, errorMessage, 'icon-256.png');
+    }
+    if (onError) onError(error);
+
+    return { status: 'error', error: error.message };
+  }
 }
 
 // Export functions for use in other modules
@@ -318,6 +486,9 @@ if (typeof window !== 'undefined') {
     formatTimestamp,
     isRestrictedPage,
     debounce,
+    getStorageConfig,
+    sendToWebhook,
+    sendToHomeAssistant,
   };
 } else if (typeof self !== 'undefined') {
   // Service worker environment - attach to self
@@ -334,5 +505,8 @@ if (typeof window !== 'undefined') {
     formatTimestamp,
     isRestrictedPage,
     debounce,
+    getStorageConfig,
+    sendToWebhook,
+    sendToHomeAssistant,
   };
 }

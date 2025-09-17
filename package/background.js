@@ -38,13 +38,13 @@ chrome.runtime.onInstalled.addListener(() => {
 /**
  * Handle context menu clicks
  */
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab || !tab.id) {
     return;
   }
 
   if (info.menuItemId === 'send-to-ha-default') {
-    handleContextMenuSend(info, tab);
+    await handleContextMenuSend(info, tab);
   }
   // Future sub-options can be handled here
 });
@@ -54,56 +54,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
  * @param {object} info - Context menu info
  * @param {object} tab - Tab information
  */
-function handleContextMenuSend(info, tab) {
-  // Prepare message payload
-  const payload = {
-    title: tab.title,
-    url: info.linkUrl || info.pageUrl || tab.url,
-    favicon: tab.favIconUrl || chrome.runtime.getURL('icon-256.png'),
-    selected: info.selectionText || '',
-    timestamp: new Date().toISOString(),
-    user_agent: navigator.userAgent,
-  };
-
-  chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
-    const { haHost, ssl = true, webhookId, userName, deviceName } = result;
-
-    if (!haHost || !webhookId) {
-      chrome.runtime.openOptionsPage();
-      ExtensionUtils.createNotification(
-        'Please set your Home Assistant hostname and webhook ID in the extension options.',
-        'send-to-ha-status',
-        'icon-256.png'
-      );
-      return;
-    }
-
-    try {
-      const webhookUrl = ExtensionUtils.createWebhookUrl(haHost, ssl, webhookId);
-
-      // Compose data with optional user fields
-      const data = {
-        ...payload,
-        user: userName || '',
-        device: deviceName || '',
-      };
-
-      sendToWebhook(webhookUrl, data)
-        .then(() => {
-          ExtensionUtils.createNotification('Sent successfully!', 'send-to-ha-status', 'icon-256.png');
-        })
-        .catch((error) => {
-          console.error('Context menu send failed:', error);
-          ExtensionUtils.createNotification('Failed to send.', 'send-to-ha-status', 'icon-256.png');
-        });
-    } catch (error) {
-      console.error('Invalid webhook configuration:', error);
-      ExtensionUtils.createNotification(
-        'Invalid configuration. Please check your settings.',
-        'send-to-ha-status',
-        'icon-256.png'
-      );
-    }
+async function handleContextMenuSend(info, tab) {
+  await ExtensionUtils.sendToHomeAssistant({
+    tab,
+    contextInfo: info,
   });
 }
 
@@ -201,7 +155,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 /**
  * Handle extension icon clicks (direct sending)
  */
-chrome.action.onClicked.addListener(async (tab) => {
+chrome.action.onClicked.addListener(async(tab) => {
   // Check for restricted pages
   if (!tab || !tab.id || ExtensionUtils.isRestrictedPage(tab.url)) {
     const errorMessage = 'Cannot send from browser internal pages.';
@@ -225,103 +179,25 @@ chrome.action.onClicked.addListener(async (tab) => {
  * @param {object} tab - The active tab
  */
 async function handleDirectSend(tab) {
-  const config = await getStorageConfig();
-
-  if (!config.haHost || !config.webhookId) {
-    const errorMessage = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
-    chrome.runtime.openOptionsPage();
-    ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
-    lastSendStatus = { status: 'error', error: 'No webhook host or ID set.' };
-    return;
-  }
-
-  const webhookUrl = ExtensionUtils.createWebhookUrl(config.haHost, config.ssl, config.webhookId);
-
-  // Get page information from the tab
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: ExtensionUtils.createPageInfo,
+  const result = await ExtensionUtils.sendToHomeAssistant({
+    tab,
+    onSuccess: async (pageInfo) => {
+      lastSendStatus = { status: 'sent' };
+      // Inject in-page alert as fallback
+      await injectPageAlert(tab.id, 'Link sent to Home Assistant!');
+    },
+    onError: async (error) => {
+      lastSendStatus = { status: 'error', error: error.message };
+      // Inject in-page alert as fallback
+      await injectPageAlert(
+        tab.id,
+        `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`,
+      );
+    },
   });
 
-  if (!results || !results[0] || !results[0].result) {
-    throw new Error('Could not get page info.');
-  }
-
-  const pageInfo = results[0].result;
-
-  // Add user and device information
-  if (config.userName) {
-    pageInfo.user = config.userName;
-  }
-  if (config.deviceName) {
-    pageInfo.device = config.deviceName;
-  }
-
-  const notifId = 'send-to-ha-status';
-  ExtensionUtils.createNotification('Sending to Home Assistant...', notifId, 'icon-256.png');
-
-  try {
-    await sendToWebhook(webhookUrl, pageInfo);
-
-    ExtensionUtils.updateNotification(notifId, 'Sent to Home Assistant!', 'icon-256.png');
-    lastSendStatus = { status: 'sent' };
-
-    // Inject in-page alert as fallback
-    await injectPageAlert(tab.id, 'Link sent to Home Assistant!');
-  } catch (error) {
-    ExtensionUtils.updateNotification(
-      notifId,
-      `Error: ${ExtensionUtils.escapeHTML(error.message)}`,
-      'icon-256.png'
-    );
-    lastSendStatus = { status: 'error', error: error.message };
-
-    // Inject in-page alert as fallback
-    await injectPageAlert(
-      tab.id,
-      `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`
-    );
-  }
+  return result;
 }
-
-/**
- * Get configuration from storage with defaults
- * @returns {Promise<object>} Configuration object
- */
-function getStorageConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
-      resolve({
-        haHost: result.haHost,
-        ssl: typeof result.ssl === 'boolean' ? result.ssl : true,
-        webhookId: result.webhookId,
-        userName: result.userName,
-        deviceName: result.deviceName,
-      });
-    });
-  });
-}
-
-/**
- * Send data to webhook with proper error handling
- * @param {string} webhookUrl - The webhook URL
- * @param {object} data - Data to send
- * @returns {Promise<Response>}
- */
-async function sendToWebhook(webhookUrl, data) {
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  return response;
-}
-
 
 /**
  * Inject in-page alert for user feedback
