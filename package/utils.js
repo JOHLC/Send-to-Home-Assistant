@@ -276,7 +276,7 @@ function formatTimestamp(timestamp) {
  * @returns {boolean} True if restricted, false otherwise
  */
 function isRestrictedPage(url) {
-  if (!url) {return true;}
+  if (!url) { return true; }
   return url.startsWith('chrome://') || 
          url.startsWith('edge://') || 
          url.startsWith('extension://') ||
