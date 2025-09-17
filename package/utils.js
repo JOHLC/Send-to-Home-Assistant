@@ -161,6 +161,10 @@ function getFavicon() {
     
     // Look for favicon-specific rel attributes (exclude apple-touch-icon and other device-specific icons)
     if (rel && rel.toLowerCase().includes('icon') && href && !rel.toLowerCase().includes('apple')) {
+      // Skip file:// URLs as they're blocked by CSP
+      if (href.startsWith('file://')) {
+        continue;
+      }
       // Extract format from URL or type attribute
       let format = '';
       const typeAttr = links[i].type;
@@ -224,12 +228,12 @@ function getFavicon() {
     return candidates[0].href;
   }
   
-  // Fallback to /favicon.ico if nothing found
-  if (location.origin) {
+  // Fallback for non-file:// URLs
+  if (location.origin && !location.protocol.startsWith('file')) {
     return location.origin + '/favicon.ico';
   }
   
-  // Final fallback to extension icon
+  // For file:// URLs or if nothing found, use extension icon fallback
   return chrome.runtime.getURL('icon-256.png');
 }
 
@@ -281,6 +285,7 @@ function isRestrictedPage(url) {
   }
   return url.startsWith('chrome://') || 
          url.startsWith('edge://') || 
+         url.startsWith('extension://') ||
          url.startsWith('moz-extension://') ||
          url.startsWith('chrome-extension://');
 }
@@ -368,13 +373,13 @@ async function sendToHomeAssistant(options) {
   // Validate inputs
   if (!tab || !tab.id) {
     const error = new Error('Invalid tab information');
-    if (onError) onError(error);
+    if (onError) {onError(error);}
     return { status: 'error', error: error.message };
   }
 
   if (isRestrictedPage(tab.url)) {
-    const error = new Error('Cannot send from browser internal pages.');
-    if (onError) onError(error);
+    const error = new Error('This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.');
+    if (onError) {onError(error);}
     if (showNotifications) {
       createNotification(error.message, notificationId, 'icon-256.png');
     }
@@ -391,7 +396,7 @@ async function sendToHomeAssistant(options) {
       if (showNotifications) {
         createNotification(errorMessage, notificationId, 'icon-256.png');
       }
-      if (onError) onError(new Error(errorMessage));
+      if (onError) {onError(new Error(errorMessage));}
       return { status: 'error', error: 'No webhook host or ID set.' };
     }
 
@@ -399,7 +404,7 @@ async function sendToHomeAssistant(options) {
     const webhookUrl = createWebhookUrl(config.haHost, config.ssl, config.webhookId);
 
     // Show progress
-    if (onProgress) onProgress('Sending to Home Assistant...');
+    if (onProgress) {onProgress('Sending to Home Assistant...');}
     if (showNotifications) {
       createNotification('Sending to Home Assistant...', notificationId, 'icon-256.png');
     }
@@ -443,11 +448,11 @@ async function sendToHomeAssistant(options) {
 
     // Success handling
     const successMessage = 'Sent to Home Assistant!';
-    if (onProgress) onProgress(successMessage);
+    if (onProgress) {onProgress(successMessage);}
     if (showNotifications) {
       updateNotification(notificationId, successMessage, 'icon-256.png');
     }
-    if (onSuccess) onSuccess(pageInfo);
+    if (onSuccess) {onSuccess(pageInfo);}
 
     return { status: 'sent', data: pageInfo };
 
@@ -455,11 +460,11 @@ async function sendToHomeAssistant(options) {
     console.error('Send to Home Assistant failed:', error);
     
     const errorMessage = `Error: ${escapeHTML(error.message)}`;
-    if (onProgress) onProgress(errorMessage);
+    if (onProgress) {onProgress(errorMessage);}
     if (showNotifications) {
       updateNotification(notificationId, errorMessage, 'icon-256.png');
     }
-    if (onError) onError(error);
+    if (onError) {onError(error);}
 
     return { status: 'error', error: error.message };
   }

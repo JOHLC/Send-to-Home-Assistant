@@ -42,7 +42,7 @@ async function sendToHA() {
     }
 
     if (!tab.id || isRestrictedPage(tab.url)) {
-      throw new Error('Cannot send from browser internal pages.');
+      throw new Error('This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.');
     }
 
     const config = await getStorageConfig();
@@ -98,7 +98,14 @@ function getActiveTab() {
  * @returns {boolean} True if restricted
  */
 function isRestrictedPage(url) {
-  return url.startsWith('chrome://') || url.startsWith('edge://');
+  if (!url) {
+    return true;
+  }
+  return url.startsWith('chrome://') || 
+         url.startsWith('edge://') ||
+         url.startsWith('extension://') ||
+         url.startsWith('moz-extension://') ||
+         url.startsWith('chrome-extension://');
 }
 
 /**

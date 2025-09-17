@@ -38,7 +38,7 @@ chrome.runtime.onInstalled.addListener(() => {
 /**
  * Handle context menu clicks
  */
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+chrome.contextMenus.onClicked.addListener(async(info, tab) => {
   if (!tab || !tab.id) {
     return;
   }
@@ -158,7 +158,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 chrome.action.onClicked.addListener(async(tab) => {
   // Check for restricted pages
   if (!tab || !tab.id || ExtensionUtils.isRestrictedPage(tab.url)) {
-    const errorMessage = 'Cannot send from browser internal pages.';
+    const errorMessage = 'This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.';
     ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
     lastSendStatus = { status: 'error', error: errorMessage };
     return;
@@ -181,12 +181,12 @@ chrome.action.onClicked.addListener(async(tab) => {
 async function handleDirectSend(tab) {
   const result = await ExtensionUtils.sendToHomeAssistant({
     tab,
-    onSuccess: async (pageInfo) => {
+    onSuccess: async(_pageInfo) => {
       lastSendStatus = { status: 'sent' };
       // Inject in-page alert as fallback
       await injectPageAlert(tab.id, 'Link sent to Home Assistant!');
     },
-    onError: async (error) => {
+    onError: async(error) => {
       lastSendStatus = { status: 'error', error: error.message };
       // Inject in-page alert as fallback
       await injectPageAlert(
