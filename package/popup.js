@@ -98,6 +98,10 @@ async function sendToHA() {
           return;
         }
         const pageInfo = results[0].result;
+        // Apply favicon fallback if no favicon or it's empty
+        if (!pageInfo.favicon || pageInfo.favicon === '') {
+          pageInfo.favicon = chrome.runtime.getURL('icon.png');
+        }
         if (userName) {
           pageInfo.user = userName;
         }
@@ -129,9 +133,12 @@ async function sendToHA() {
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
             }
+            // Get extension icon URL for fallback
+            const extensionIconUrl = chrome.runtime.getURL('icon.png');
+            
             preview.innerHTML =
               '<div>' +
-              (pageInfo.favicon ? `<div class="preview-row preview-row-center"><img src="${escapeHTML(pageInfo.favicon)}" alt="favicon" class="preview-favicon"></div>` : '') +
+              (pageInfo.favicon ? `<div class="preview-row preview-row-center"><img src="${escapeHTML(pageInfo.favicon)}" alt="favicon" class="preview-favicon" onerror="this.src='${extensionIconUrl}'"></div>` : `<div class="preview-row preview-row-center"><img src="${extensionIconUrl}" alt="favicon" class="preview-favicon"></div>`) +
               `<div class="preview-row"><span class="preview-label">Title:</span><span class="preview-value">${escapeHTML(pageInfo.title)}</span></div>` +
               `<div class="preview-row"><span class="preview-label">URL:</span><span class="preview-value preview-url" title="${escapeHTML(pageInfo.url)}"><a href="${escapeHTML(pageInfo.url)}" target="_blank" rel="noopener noreferrer" class="link-blue">${escapeHTML(pageInfo.url)}</a></span></div>` +
               (pageInfo.selected ? `<div class="preview-row"><span class="preview-label">Selected:</span><span class="preview-value">${escapeHTML(pageInfo.selected)}</span></div>` : '') +
