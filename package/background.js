@@ -27,7 +27,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     let payload = {
       title: tab.title,
       url: info.linkUrl || info.pageUrl || tab.url,
-      favicon: tab.favIconUrl || '',
+      favicon: tab.favIconUrl || chrome.runtime.getURL('icon.png'),
       selected: info.selectionText || '',
       timestamp: new Date().toISOString()
     };
@@ -185,6 +185,10 @@ chrome.action.onClicked.addListener(async (tab) => {
             break;
           }
         }
+        // Fallback to /favicon.ico if nothing found
+        if (!favicon && location.origin) {
+          favicon = location.origin + '/favicon.ico';
+        }
         let selected = '';
         if (window.getSelection) {
           selected = window.getSelection().toString();
@@ -209,6 +213,10 @@ chrome.action.onClicked.addListener(async (tab) => {
         return;
       }
       const pageInfo = results[0].result;
+      // Apply favicon fallback if no favicon or it's empty
+      if (!pageInfo.favicon || pageInfo.favicon === '') {
+        pageInfo.favicon = chrome.runtime.getURL('icon.png');
+      }
       pageInfo.user_agent = navigator.userAgent;
       const notifId = 'send-to-ha-status';
       chrome.notifications?.create(notifId, {
