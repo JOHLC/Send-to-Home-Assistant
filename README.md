@@ -3,9 +3,7 @@
 <img src="https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/tags/v2025.09.2-beta1/package/icon.png" alt="Send to Home Assistant Logo" width="200" />
 
 [![Visit/download on Github](https://img.shields.io/badge/GitHub-Download-blue?logo=github)](https://github.com/JOHLC/Send-to-Home-Assistant) ![GitHub Release](https://img.shields.io/github/v/release/JOHLC/send-to-home-assistant) ![GitHub Release Date](https://img.shields.io/github/release-date/JOHLC/send-to-home-assistant?label=Latest%20release)
- ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/JOHLC/send-to-home-assistant/total) 
- 
- ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/JOHLC/send-to-home-assistant) ![GitHub Sponsors](https://img.shields.io/github/sponsors/JOHLC)
+ ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/JOHLC/send-to-home-assistant/total) ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/JOHLC/send-to-home-assistant) ![GitHub Sponsors](https://img.shields.io/github/sponsors/JOHLC)
 
 
 
@@ -134,3 +132,4 @@ MIT
 **Home Assistant** is an open-source home automation platform. Learn more at [home-assistant.io](https://www.home-assistant.io/)
 
 ---
+
