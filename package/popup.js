@@ -202,7 +202,7 @@ function getActiveTab() {
  * @returns {boolean} True if restricted
  */
 function isRestrictedPage(url) {
-  if (!url) {return true;}
+  if (!url) { return true; }
   return url.startsWith('chrome://') || 
          url.startsWith('edge://') || 
          url.startsWith('extension://') ||
