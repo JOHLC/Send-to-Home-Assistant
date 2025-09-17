@@ -229,7 +229,8 @@ function getFavicon() {
     return location.origin + '/favicon.ico';
   }
   
-  return '';
+  // Final fallback to extension icon
+  return chrome.runtime.getURL('icon.png');
 }
 
 /**

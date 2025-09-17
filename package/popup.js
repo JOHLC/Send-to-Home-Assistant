@@ -242,6 +242,11 @@ async function getPageInfo(tabId, config) {
 
   const pageInfo = results[0].result;
   
+  // Apply extension icon fallback if no favicon found
+  if (!pageInfo.favicon) {
+    pageInfo.favicon = chrome.runtime.getURL('icon.png');
+  }
+  
   // Add user information if provided
   if (config.userName) {
     pageInfo.user = config.userName;
@@ -319,15 +324,19 @@ function showPreview(pageInfo) {
   }
 
   // Build preview HTML with proper escaping
+  // Determine if favicon is a placeholder (extension icon)
+  const isPlaceholder = pageInfo.favicon && pageInfo.favicon.includes('icon.png');
+  const faviconClass = isPlaceholder ? 'preview-favicon preview-favicon-placeholder' : 'preview-favicon';
+  
   const previewRows = [
-    pageInfo.favicon ? `<div class="preview-row preview-row-center"><img src="${escapeHTML(pageInfo.favicon)}" alt="favicon" class="preview-favicon"></div>` : '',
+    `<div class="preview-row preview-row-center"><img src="${escapeHTML(pageInfo.favicon)}" alt="favicon" class="${faviconClass}"></div>`,
     `<div class="preview-row"><span class="preview-label">Title:</span><span class="preview-value">${escapeHTML(pageInfo.title)}</span></div>`,
     `<div class="preview-row"><span class="preview-label">URL:</span><span class="preview-value preview-url" title="${escapeHTML(pageInfo.url)}"><a href="${escapeHTML(pageInfo.url)}" target="_blank" rel="noopener noreferrer" class="link-blue">${escapeHTML(pageInfo.url)}</a></span></div>`,
     pageInfo.selected ? `<div class="preview-row"><span class="preview-label">Selected:</span><span class="preview-value">${escapeHTML(pageInfo.selected)}</span></div>` : '',
     `<div class="preview-row"><span class="preview-label">Timestamp:</span><span class="preview-value">${escapeHTML(formatTimestamp(pageInfo.timestamp))}</span></div>`,
-  ].filter(Boolean);
+  ];
 
-  preview.innerHTML = '<div>' + previewRows.join('') + '</div>';
+  preview.innerHTML = '<div>' + previewRows.filter(Boolean).join('') + '</div>';
 
   // Add copy JSON button
   addCopyButton(pageInfo);
