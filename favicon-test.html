@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Favicon Fallback Test Page</title>
+  <!-- Test various favicon scenarios -->
+  <link rel="icon" href="https://nonexistent.domain/broken.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="/404-favicon.ico" type="image/x-icon">
+</head>
+<body>
+  <h1>Favicon Fallback Test Page</h1>
+  <p>This page has broken favicon links to test the extension's fallback behavior.</p>
+  
+  <h2>Test Cases:</h2>
+  <ul>
+    <li><strong>Broken domain favicon:</strong> https://nonexistent.domain/broken.ico</li>
+    <li><strong>404 favicon:</strong> /404-favicon.ico</li>
+    <li>No valid favicon should be found - extension should fall back to its own icon</li>
+  </ul>
+  
+  <p>Select this text to test: <strong>Selected text for testing</strong></p>
+  
+  <p>Use the Send to Home Assistant extension on this page to verify that:</p>
+  <ol>
+    <li>The popup preview shows the extension icon instead of broken images</li>
+    <li>The webhook payload includes proper fallback handling</li>
+    <li>Context menu usage also handles the fallback properly</li>
+  </ol>
+</body>
+</html>

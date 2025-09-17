@@ -42,7 +42,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab || !tab.id) {
     return;
   }
-  
+
   if (info.menuItemId === 'send-to-ha-default') {
     handleContextMenuSend(info, tab);
   }
@@ -67,18 +67,20 @@ function handleContextMenuSend(info, tab) {
 
   chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
     const { haHost, ssl = true, webhookId, userName, deviceName } = result;
-    
+
     if (!haHost || !webhookId) {
       chrome.runtime.openOptionsPage();
       ExtensionUtils.createNotification(
         'Please set your Home Assistant hostname and webhook ID in the extension options.',
+        'send-to-ha-status',
+        'icon-256.png'
       );
       return;
     }
 
     try {
       const webhookUrl = ExtensionUtils.createWebhookUrl(haHost, ssl, webhookId);
-      
+
       // Compose data with optional user fields
       const data = {
         ...payload,
@@ -88,18 +90,23 @@ function handleContextMenuSend(info, tab) {
 
       sendToWebhook(webhookUrl, data)
         .then(() => {
-          ExtensionUtils.createNotification('Sent successfully!');
+          ExtensionUtils.createNotification('Sent successfully!', 'send-to-ha-status', 'icon-256.png');
         })
         .catch((error) => {
           console.error('Context menu send failed:', error);
-          ExtensionUtils.createNotification('Failed to send.');
+          ExtensionUtils.createNotification('Failed to send.', 'send-to-ha-status', 'icon-256.png');
         });
     } catch (error) {
       console.error('Invalid webhook configuration:', error);
-      ExtensionUtils.createNotification('Invalid configuration. Please check your settings.');
+      ExtensionUtils.createNotification(
+        'Invalid configuration. Please check your settings.',
+        'send-to-ha-status',
+        'icon-256.png'
+      );
     }
   });
 }
+
 // --- Extension update check (GitHub releases) ---
 
 /**
@@ -194,11 +201,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 /**
  * Handle extension icon clicks (direct sending)
  */
-chrome.action.onClicked.addListener(async(tab) => {
+chrome.action.onClicked.addListener(async (tab) => {
   // Check for restricted pages
   if (!tab || !tab.id || ExtensionUtils.isRestrictedPage(tab.url)) {
     const errorMessage = 'Cannot send from browser internal pages.';
-    ExtensionUtils.createNotification(errorMessage);
+    ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
     lastSendStatus = { status: 'error', error: errorMessage };
     return;
   }
@@ -208,7 +215,7 @@ chrome.action.onClicked.addListener(async(tab) => {
   } catch (error) {
     console.error('Direct send failed:', error);
     const errorMessage = `Failed to send: ${ExtensionUtils.escapeHTML(error.message)}`;
-    ExtensionUtils.createNotification(errorMessage);
+    ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
     lastSendStatus = { status: 'error', error: error.message };
   }
 });
@@ -219,17 +226,17 @@ chrome.action.onClicked.addListener(async(tab) => {
  */
 async function handleDirectSend(tab) {
   const config = await getStorageConfig();
-  
+
   if (!config.haHost || !config.webhookId) {
     const errorMessage = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
     chrome.runtime.openOptionsPage();
-    ExtensionUtils.createNotification(errorMessage);
+    ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
     lastSendStatus = { status: 'error', error: 'No webhook host or ID set.' };
     return;
   }
 
   const webhookUrl = ExtensionUtils.createWebhookUrl(config.haHost, config.ssl, config.webhookId);
-  
+
   // Get page information from the tab
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
@@ -241,7 +248,7 @@ async function handleDirectSend(tab) {
   }
 
   const pageInfo = results[0].result;
-  
+
   // Add user and device information
   if (config.userName) {
     pageInfo.user = config.userName;
@@ -251,23 +258,29 @@ async function handleDirectSend(tab) {
   }
 
   const notifId = 'send-to-ha-status';
-  ExtensionUtils.createNotification('Sending to Home Assistant...', notifId);
+  ExtensionUtils.createNotification('Sending to Home Assistant...', notifId, 'icon-256.png');
 
   try {
     await sendToWebhook(webhookUrl, pageInfo);
-    
-    ExtensionUtils.updateNotification(notifId, 'Sent to Home Assistant!');
+
+    ExtensionUtils.updateNotification(notifId, 'Sent to Home Assistant!', 'icon-256.png');
     lastSendStatus = { status: 'sent' };
-    
+
     // Inject in-page alert as fallback
     await injectPageAlert(tab.id, 'Link sent to Home Assistant!');
-    
   } catch (error) {
-    ExtensionUtils.updateNotification(notifId, `Error: ${ExtensionUtils.escapeHTML(error.message)}`);
+    ExtensionUtils.updateNotification(
+      notifId,
+      `Error: ${ExtensionUtils.escapeHTML(error.message)}`,
+      'icon-256.png'
+    );
     lastSendStatus = { status: 'error', error: error.message };
-    
+
     // Inject in-page alert as fallback
-    await injectPageAlert(tab.id, `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`);
+    await injectPageAlert(
+      tab.id,
+      `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`
+    );
   }
 }
 
@@ -293,7 +306,7 @@ function getStorageConfig() {
  * Send data to webhook with proper error handling
  * @param {string} webhookUrl - The webhook URL
  * @param {object} data - Data to send
- * @returns {Promise} Fetch promise
+ * @returns {Promise<Response>}
  */
 async function sendToWebhook(webhookUrl, data) {
   const response = await fetch(webhookUrl, {
@@ -308,6 +321,7 @@ async function sendToWebhook(webhookUrl, data) {
 
   return response;
 }
+
 
 /**
  * Inject in-page alert for user feedback
