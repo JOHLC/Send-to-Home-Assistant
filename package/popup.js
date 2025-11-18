@@ -191,18 +191,6 @@ function showPreview(pageInfo) {
   `;
   previewDiv.appendChild(urlRow);
   
-  // Favicon row
-  const faviconRow = document.createElement('div');
-  faviconRow.className = 'preview-row preview-row-center';
-  faviconRow.innerHTML = `
-    <span class="preview-label">Favicon:</span>
-    <img src="${ExtensionUtils.escapeHTML(pageInfo.favicon)}" 
-         alt="favicon" 
-         class="preview-favicon"
-         onerror="this.src='${chrome.runtime.getURL('icon-256.png')}'; this.classList.add('preview-favicon-placeholder');">
-  `;
-  previewDiv.appendChild(faviconRow);
-  
   // Selected text row (if any)
   if (pageInfo.selected) {
     const selectedRow = document.createElement('div');
@@ -222,7 +210,19 @@ function showPreview(pageInfo) {
     <span class="preview-value">${ExtensionUtils.formatTimestamp(pageInfo.timestamp)}</span>
   `;
   previewDiv.appendChild(timestampRow);
-  
+
+  // Favicon row
+  const faviconRow = document.createElement('div');
+  faviconRow.className = 'preview-row preview-row';
+  faviconRow.innerHTML = `
+    <span class="preview-label">Favicon:</span>
+    <img src="${ExtensionUtils.escapeHTML(pageInfo.favicon)}" 
+         alt="favicon" 
+         class="preview-favicon"
+         onerror="this.src='${chrome.runtime.getURL('icon-256.png')}'; this.classList.add('preview-favicon-placeholder');">
+  `;
+  previewDiv.appendChild(faviconRow);
+    
   msgDiv.appendChild(previewDiv);
   addCopyButton(pageInfo);
 }
@@ -312,4 +312,5 @@ initPopup();
 // OK button closes the popup
 okBtn.addEventListener('click', () => {
   window.close();
+
 });
