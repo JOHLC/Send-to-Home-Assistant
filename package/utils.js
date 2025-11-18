@@ -136,40 +136,6 @@ function updateNotification(notificationId, message) {
 }
 
 /**
- * Validates and sanitizes a favicon URL
- * Returns extension icon for problematic URLs that could cause issues
- * @param {string} faviconUrl - The favicon URL to validate
- * @returns {string} The validated favicon URL or extension icon fallback
- */
-function validateFaviconUrl(faviconUrl) {
-  // If no favicon provided, use extension icon
-  if (!faviconUrl) {
-    return chrome.runtime.getURL('icon-256.png');
-  }
-  
-  try {
-    const url = new URL(faviconUrl);
-    
-    // Check for problematic URLs that could cause CSP violations or other issues
-    if (url.protocol === 'file:' || 
-        url.hostname === '' || 
-        url.hostname === 'localhost' ||
-        url.hostname.endsWith('.local') ||
-        url.href.includes('404') ||
-        url.href.includes('nonexistent')) {
-      // These could cause issues, use extension icon instead
-      return chrome.runtime.getURL('icon-256.png');
-    }
-    
-    // URL is valid, return as-is
-    return faviconUrl;
-  } catch (error) {
-    // Invalid URL, fallback to extension icon
-    return chrome.runtime.getURL('icon-256.png');
-  }
-}
-
-/**
  * Gets the favicon URL with prioritization for mobile-compatible formats
  * @returns {string} The favicon URL or empty string if not found
  */
@@ -269,6 +235,73 @@ function getFavicon() {
   
   // For file:// URLs or if nothing found, use extension icon fallback
   return chrome.runtime.getURL('icon-256.png');
+}
+
+/**
+ * Validates a favicon URL by attempting to fetch it with a HEAD request
+ * Note: This performs a network request and may take up to the timeout duration
+ * @param {string} faviconUrl - The favicon URL to validate
+ * @param {number} timeout - Timeout in milliseconds (default: 1000)
+ * @returns {Promise<string>} The validated URL or fallback to extension icon
+ */
+async function validateFaviconUrl(faviconUrl, timeout = 1000) {
+  // Return extension icon for empty or invalid URLs
+  if (!faviconUrl) {
+    return chrome.runtime.getURL('icon-256.png');
+  }
+
+  // Basic URL validation
+  try {
+    const url = new URL(faviconUrl);
+    
+    // Skip problematic protocols
+    if (url.protocol === 'file:' || 
+        url.protocol === 'chrome:' || 
+        url.protocol === 'chrome-extension:' ||
+        url.protocol === 'edge:' ||
+        url.protocol === 'about:') {
+      return chrome.runtime.getURL('icon-256.png');
+    }
+
+    // Skip localhost and .local domains as they may not be accessible from Home Assistant
+    if (url.hostname === '' || 
+        url.hostname === 'localhost' ||
+        url.hostname.endsWith('.local')) {
+      return chrome.runtime.getURL('icon-256.png');
+    }
+  } catch (error) {
+    // Invalid URL format
+    return chrome.runtime.getURL('icon-256.png');
+  }
+
+  // Attempt to fetch the favicon with timeout
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(faviconUrl, {
+        method: 'HEAD', // Use HEAD to avoid downloading the entire image
+        signal: controller.signal,
+        cache: 'no-cache', // Always revalidate to avoid stale favicon validation
+      });
+
+      // Check if the response is successful and is an image
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.startsWith('image/')) {
+          return faviconUrl;
+        }
+      }
+
+      // If not successful or not an image, fall back to extension icon
+      return chrome.runtime.getURL('icon-256.png');
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error) {
+    // Network error, timeout, or other fetch failure - fall back to extension icon
+    return chrome.runtime.getURL('icon-256.png');
+  }
 }
 
 /**
@@ -447,10 +480,13 @@ async function sendToHomeAssistant(options) {
 
     if (contextInfo) {
       // Context menu scenario - manually build payload
+      // Validate favicon URL by attempting to fetch it
+      const validatedFavicon = await validateFaviconUrl(tab.favIconUrl);
+      
       pageInfo = {
         title: tab.title,
         url: contextInfo.linkUrl || contextInfo.pageUrl || tab.url,
-        favicon: validateFaviconUrl(tab.favIconUrl),
+        favicon: validatedFavicon,
         selected: contextInfo.selectionText || '',
         timestamp: new Date().toISOString(),
         user_agent: navigator.userAgent,
@@ -469,7 +505,7 @@ async function sendToHomeAssistant(options) {
       pageInfo = results[0].result;
       
       // Validate favicon URL
-      pageInfo.favicon = validateFaviconUrl(pageInfo.favicon);
+      pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
     }
 
     // Add user and device information
