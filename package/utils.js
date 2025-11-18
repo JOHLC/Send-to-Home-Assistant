@@ -282,7 +282,6 @@ async function validateFaviconUrl(faviconUrl, timeout = 1000) {
       const response = await fetch(faviconUrl, {
         method: 'HEAD', // Use HEAD to avoid downloading the entire image
         signal: controller.signal,
-        cache: 'no-cache', // Always revalidate to avoid stale favicon validation
       });
 
       // Check if the response is successful and is an image
