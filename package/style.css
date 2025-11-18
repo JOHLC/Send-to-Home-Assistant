@@ -381,3 +381,63 @@ button:active, .ok-btn:active {
   outline: none;
   box-shadow: 0 4px 16px #00b4fc55;
 }
+
+/* Context Menu Items Management */
+.add-menu-item-row {
+  display: flex;
+  gap: 0.5em;
+  width: 100%;
+  margin-bottom: 1.5em;
+  align-items: center;
+}
+.add-menu-item-row input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.add-menu-item-row button {
+  margin-bottom: 0;
+  min-width: 70px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7em 1em;
+  background: #232e4a;
+  border-radius: 8px;
+  margin-bottom: 0.5em;
+  box-shadow: 0 1.5px 8px #00b4fc22;
+}
+.menu-item-name {
+  color: #eaf6ff;
+  font-weight: 600;
+  flex: 1;
+}
+.menu-item-default {
+  color: #00e6a8;
+  font-size: 0.9em;
+  margin-left: 0.5em;
+}
+.menu-item-remove {
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+  background: linear-gradient(90deg, #ff4e6a 0%, #ffb347 100%);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 1.5px 8px rgba(255, 78, 106, 0.3);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.menu-item-remove:hover {
+  box-shadow: 0 2px 12px rgba(255, 78, 106, 0.5);
+}
+.menu-item-remove:active {
+  background: #ff4e6a;
+  box-shadow: 0 1px 4px rgba(255, 78, 106, 0.4);
+}
+#contextMenuItems {
+  width: 100%;
+  margin-bottom: 1em;
+}

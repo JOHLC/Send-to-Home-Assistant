@@ -30,6 +30,16 @@
   <label for="deviceName">Device Name <span class="label-note">(optional, for identifying this device)</span></label>
   <input type="text" id="deviceName" placeholder="e.g. Work Laptop" maxlength="32">
 
+  <span class="options-title">Context Menu Options</span>
+  <p>Add custom context menu items to route different actions in Home Assistant. Each menu item will include a "context" field in the JSON payload.</p>
+  
+  <div id="contextMenuItems"></div>
+  
+  <div class="add-menu-item-row">
+    <input type="text" id="newMenuItemName" placeholder="Enter menu item name (e.g., Automation)" maxlength="32">
+    <button id="addMenuItem" class="copy-btn">Add</button>
+  </div>
+
     <div class="btn-row">
       <button id="test" class="copy-btn">Test</button>
       <button id="save" class="copy-btn">Save</button>
