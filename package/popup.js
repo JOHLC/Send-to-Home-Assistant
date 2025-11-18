@@ -110,6 +110,7 @@ async function sendToHA(tab, contextName) {
         console.error('Send to HA failed:', error);
         handleError(error);
         showButton();
+        contextSelection.classList.remove('hidden');
       },
       showNotifications: true,
       notificationId: 'send-to-ha-status',
@@ -119,6 +120,7 @@ async function sendToHA(tab, contextName) {
     console.error('Send to HA failed:', error);
     handleError(error);
     showButton();
+    contextSelection.classList.remove('hidden');
   }
 }
 
