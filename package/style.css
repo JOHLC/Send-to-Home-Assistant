@@ -6,10 +6,6 @@
   margin: 0.7em 0 0.5em 0;
   letter-spacing: 0.01em;
 }
-/* Center preview row for favicon */
-.preview-row-center {
-  justify-content: center;
-}
 /* Favicon image in preview */
 .preview-favicon {
   width: 38px;
@@ -476,3 +472,4 @@ button:active, .ok-btn:active {
   box-shadow: 0 1px 4px #00b4fc44;
   transform: translateY(0);
 }
+
