@@ -535,13 +535,8 @@ async function sendToHomeAssistant(options) {
 
       pageInfo = results[0].result;
       
-      // Use extension icon as fallback if favicon is empty
-      if (!pageInfo.favicon) {
-        pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
-      }
-      
-      // Favicon has already been validated earlier; skip redundant validation here
-      // pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
+      // Validate favicon URL (handles empty/invalid URLs with fallback internally)
+      pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
     }
 
     // Add user and device information
