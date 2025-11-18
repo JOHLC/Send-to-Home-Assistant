@@ -161,7 +161,7 @@ label {
   width: auto;
   align-self: center;
 }
-input[type="text"] {
+input[type="text"], input[type="password"] {
   width: 100%;
   padding: 0.7em 1em;
   font-size: 1.08em;
@@ -191,7 +191,7 @@ input[type="text"] {
   transition: border 0.2s, box-shadow 0.2s;
   box-shadow: 0 1.5px 8px #00b4fc22;
 }
-input[type="text"]:focus {
+input[type="text"]:focus, input[type="password"]:focus {
   border: 2.5px solid #00b4fc;
   outline: none;
   box-shadow: 0 2px 12px #00b4fc44;
