@@ -196,7 +196,7 @@ function addCopyButton(pageInfo) {
 
   copyWrapper.appendChild(copyBtn);
 
-  copyBtn.addEventListener('click', async() => {
+  copyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(pageInfo, null, 2));
       copyBtn.textContent = 'Copied!';
