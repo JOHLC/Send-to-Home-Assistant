@@ -242,7 +242,7 @@ function addContextMenuItem() {
   chrome.storage.sync.set({ contextMenuItems }, () => {
     renderContextMenuItems();
     newMenuItemInput.value = '';
-    showStatus('Menu item added! Click "Save" to apply changes.', 'success');
+    showStatus('Menu item added! Changes will be reflected immediately.', 'success');
     setTimeout(clearStatus, 2000);
   });
 }
