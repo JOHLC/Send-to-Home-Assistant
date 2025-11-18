@@ -617,8 +617,8 @@ async function sendToHomeAssistant(options) {
         pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
       }
       
-      // Validate favicon URL
-      pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
+      // Favicon has already been validated earlier; skip redundant validation here
+      // pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
     }
 
     // Add user and device information
