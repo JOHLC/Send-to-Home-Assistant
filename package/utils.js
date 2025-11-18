@@ -136,40 +136,6 @@ function updateNotification(notificationId, message) {
 }
 
 /**
- * Validates and sanitizes a favicon URL
- * Returns extension icon for problematic URLs that could cause issues
- * @param {string} faviconUrl - The favicon URL to validate
- * @returns {string} The validated favicon URL or extension icon fallback
- */
-function validateFaviconUrl(faviconUrl) {
-  // If no favicon provided, use extension icon
-  if (!faviconUrl) {
-    return chrome.runtime.getURL('icon-256.png');
-  }
-  
-  try {
-    const url = new URL(faviconUrl);
-    
-    // Check for problematic URLs that could cause CSP violations or other issues
-    if (url.protocol === 'file:' || 
-        url.hostname === '' || 
-        url.hostname === 'localhost' ||
-        url.hostname.endsWith('.local') ||
-        url.href.includes('404') ||
-        url.href.includes('nonexistent')) {
-      // These could cause issues, use extension icon instead
-      return chrome.runtime.getURL('icon-256.png');
-    }
-    
-    // URL is valid, return as-is
-    return faviconUrl;
-  } catch (error) {
-    // Invalid URL, fallback to extension icon
-    return chrome.runtime.getURL('icon-256.png');
-  }
-}
-
-/**
  * Gets the favicon URL with prioritization for mobile-compatible formats
  * @returns {string} The favicon URL or empty string if not found
  */
@@ -538,7 +504,7 @@ async function sendToHomeAssistant(options) {
       pageInfo = results[0].result;
       
       // Validate favicon URL
-      pageInfo.favicon = validateFaviconUrl(pageInfo.favicon);
+      pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
     }
 
     // Add user and device information
@@ -593,7 +559,6 @@ if (typeof window !== 'undefined') {
     updateNotification,
     validateFaviconUrl,
     getFavicon,
-    validateFaviconUrl,
     getSelectedText,
     createPageInfo,
     formatTimestamp,
@@ -617,7 +582,6 @@ if (typeof window !== 'undefined') {
     updateNotification,
     validateFaviconUrl,
     getFavicon,
-    validateFaviconUrl,
     getSelectedText,
     createPageInfo,
     formatTimestamp,
