@@ -9,14 +9,20 @@
 /* Center preview row for favicon */
 .preview-row-center {
   justify-content: center;
+  gap: 0.5em;
+}
+.preview-row-center .preview-label {
+  min-width: auto;
+  margin-right: 0;
+  padding-right: 0;
 }
 /* Favicon image in preview */
 .preview-favicon {
-  width: 38px;
-  height: 38px;
+  width: 28px;
+  height: 28px;
   vertical-align: middle;
   margin-bottom: 0.5em;
-  border-radius: 8px;
+  border-radius: 6px;
   box-shadow: 0 1px 4px #00b4fc44;
 }
 /* Placeholder favicon styling */
