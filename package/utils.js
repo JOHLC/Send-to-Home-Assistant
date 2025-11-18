@@ -238,12 +238,13 @@ function getFavicon() {
 }
 
 /**
- * Validates a favicon URL by attempting to fetch it
+ * Validates a favicon URL by attempting to fetch it with a HEAD request
+ * Note: This performs a network request and may take up to the timeout duration
  * @param {string} faviconUrl - The favicon URL to validate
- * @param {number} timeout - Timeout in milliseconds (default: 3000)
+ * @param {number} timeout - Timeout in milliseconds (default: 1000)
  * @returns {Promise<string>} The validated URL or fallback to extension icon
  */
-async function validateFaviconUrl(faviconUrl, timeout = 3000) {
+async function validateFaviconUrl(faviconUrl, timeout = 1000) {
   // Return extension icon for empty or invalid URLs
   if (!faviconUrl) {
     return chrome.runtime.getURL('icon-256.png');
@@ -281,7 +282,7 @@ async function validateFaviconUrl(faviconUrl, timeout = 3000) {
       const response = await fetch(faviconUrl, {
         method: 'HEAD', // Use HEAD to avoid downloading the entire image
         signal: controller.signal,
-        cache: 'force-cache', // Use cache if available
+        cache: 'no-cache', // Always revalidate to avoid stale favicon validation
       });
 
       // Check if the response is successful and is an image
