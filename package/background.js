@@ -82,6 +82,13 @@ chrome.contextMenus.onClicked.addListener(async(info, tab) => {
     
     // Get the menu item name from storage
     chrome.storage.sync.get(['contextMenuItems'], async(result) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error accessing storage:', chrome.runtime.lastError);
+        // Fall back to using the context ID as the name
+        await handleContextMenuSend(info, tab, contextId);
+        return;
+      }
+      
       let contextName = contextId; // Default to ID if not found
       
       if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
