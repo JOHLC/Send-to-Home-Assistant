@@ -61,6 +61,26 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 /**
+ * Format a context ID into a user-friendly display name.
+ * Handles special cases like 'default' and formats kebab-case IDs into Title Case.
+ * @param {string} contextId - The context ID to format (e.g., 'default', 'work-item')
+ * @returns {string} The formatted display name (e.g., 'Default', 'Work Item')
+ */
+function formatContextIdForDisplay(contextId) {
+  // Special case: 'default' should always be 'Default'
+  if (contextId === 'default') {
+    return 'Default';
+  }
+  
+  // Convert kebab-case to Title Case
+  // e.g., 'work-item' -> 'Work Item', 'my-custom-context' -> 'My Custom Context'
+  return contextId
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+/**
  * Handle context menu clicks
  */
 chrome.contextMenus.onClicked.addListener(async(info, tab) => {
@@ -82,13 +102,18 @@ chrome.contextMenus.onClicked.addListener(async(info, tab) => {
     
     // Get the menu item name from storage
     chrome.storage.sync.get(['contextMenuItems'], async(result) => {
-      let contextName = contextId; // Default to ID if not found
+      let contextName;
       
       if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
         const menuItem = result.contextMenuItems.find(item => item.id === contextId);
         if (menuItem) {
           contextName = menuItem.name;
         }
+      }
+      
+      // If not found, use a formatted version of the ID as fallback
+      if (!contextName) {
+        contextName = formatContextIdForDisplay(contextId);
       }
       
       await handleContextMenuSend(info, tab, contextName);
