@@ -27,23 +27,76 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const msgDiv = document.getElementById('popupMsg');
 const okBtn = document.getElementById('okBtn');
+const contextSelection = document.getElementById('contextSelection');
 
 /**
- * Main function to send page data to Home Assistant
+ * Initialize popup by loading context menu items
  */
-async function sendToHA() {
-  updateStatus('Sending...');
-  hideButton();
-
+async function initPopup() {
   try {
     const tab = await getActiveTab();
     if (!tab) {
       throw new Error('No active tab found');
     }
 
+    // Check for restricted pages
+    if (ExtensionUtils.isRestrictedPage(tab.url)) {
+      updateStatus('This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.');
+      showButton();
+      return;
+    }
+
+    // Load context menu items and display selection UI
+    chrome.storage.sync.get(['contextMenuItems'], (result) => {
+      let menuItems = [{ id: 'default', name: 'Default' }]; // Default fallback
+      
+      if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
+        menuItems = result.contextMenuItems;
+      }
+      
+      displayContextSelection(menuItems, tab);
+    });
+  } catch (error) {
+    console.error('Popup initialization failed:', error);
+    handleError(error);
+    showButton();
+  }
+}
+
+/**
+ * Display context selection buttons
+ * @param {Array} menuItems - Array of menu items
+ * @param {object} tab - Tab object
+ */
+function displayContextSelection(menuItems, tab) {
+  contextSelection.innerHTML = '';
+  
+  menuItems.forEach((item) => {
+    const btn = document.createElement('button');
+    btn.className = 'context-btn';
+    btn.textContent = item.name;
+    btn.addEventListener('click', () => {
+      sendToHA(tab, item.name);
+    });
+    contextSelection.appendChild(btn);
+  });
+}
+
+/**
+ * Main function to send page data to Home Assistant
+ * @param {object} tab - Tab object
+ * @param {string} contextName - Name of the context to send with
+ */
+async function sendToHA(tab, contextName) {
+  updateStatus('Sending...');
+  hideButton();
+  contextSelection.classList.add('hidden');
+
+  try {
     // Use unified sendToHomeAssistant function with popup-specific callbacks
     await ExtensionUtils.sendToHomeAssistant({
       tab,
+      context: contextName,
       onProgress: (message) => {
         updateStatus(message);
       },
@@ -254,7 +307,7 @@ function handleError(error) {
 // --- Event Listeners ---
 
 // Initialize popup when page loads
-sendToHA();
+initPopup();
 
 // OK button closes the popup
 okBtn.addEventListener('click', () => {
