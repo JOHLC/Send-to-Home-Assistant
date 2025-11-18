@@ -277,26 +277,26 @@ async function validateFaviconUrl(faviconUrl, timeout = 3000) {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(faviconUrl, {
+        method: 'HEAD', // Use HEAD to avoid downloading the entire image
+        signal: controller.signal,
+        cache: 'force-cache', // Use cache if available
+      });
 
-    const response = await fetch(faviconUrl, {
-      method: 'HEAD', // Use HEAD to avoid downloading the entire image
-      signal: controller.signal,
-      cache: 'no-cache', // Always revalidate to avoid stale favicon validation
-    });
-
-    clearTimeout(timeoutId);
-
-    // Check if the response is successful and is an image
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.startsWith('image/')) {
-        return faviconUrl;
+      // Check if the response is successful and is an image
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.startsWith('image/')) {
+          return faviconUrl;
+        }
       }
+
+      // If not successful or not an image, fall back to extension icon
+      return chrome.runtime.getURL('icon-256.png');
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    // If not successful or not an image, fall back to extension icon
-    return chrome.runtime.getURL('icon-256.png');
-
   } catch (error) {
     // Network error, timeout, or other fetch failure - fall back to extension icon
     return chrome.runtime.getURL('icon-256.png');
