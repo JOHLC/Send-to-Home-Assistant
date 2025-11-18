@@ -495,9 +495,115 @@ async function sendToHomeAssistant(options) {
       };
     } else {
       // Direct send scenario - get page info via scripting
+      // We need to inject a self-contained function since chrome.scripting.executeScript
+      // serializes the function and external dependencies won't be available
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: createPageInfo,
+        func: () => {
+          // Self-contained getFavicon implementation
+          function getFavicon() {
+            const links = document.getElementsByTagName('link');
+            
+            const formatPriority = {
+              'png': 1,
+              'jpg': 2,
+              'jpeg': 2,
+              'webp': 3,
+              'ico': 4,
+              'svg': 10,
+            };
+            
+            const candidates = [];
+            
+            for (let i = 0; i < links.length; i++) {
+              const rel = links[i].rel;
+              const href = links[i].href;
+              
+              if (rel && rel.toLowerCase().includes('icon') && href && !rel.toLowerCase().includes('apple')) {
+                if (href.startsWith('file://')) {
+                  continue;
+                }
+                
+                let format = '';
+                const typeAttr = links[i].type;
+                if (typeAttr) {
+                  const match = typeAttr.match(/image\/([a-zA-Z0-9-]+)/);
+                  if (match) {
+                    format = match[1].toLowerCase();
+                  }
+                } else {
+                  const urlMatch = href.match(/\.(\w+)(\?.*)?$/);
+                  if (urlMatch) {
+                    format = urlMatch[1].toLowerCase();
+                  }
+                }
+                
+                if (format === 'x-icon') {
+                  format = 'ico';
+                }
+                
+                let size = 0;
+                if (links[i].sizes && links[i].sizes.value) {
+                  const sizes = links[i].sizes.value.split(' ');
+                  for (const s of sizes) {
+                    if (s === 'any') {continue;}
+                    const parts = s.split('x');
+                    if (parts.length === 2) {
+                      const n = parseInt(parts[0], 10);
+                      if (n > size) {
+                        size = n;
+                      }
+                    }
+                  }
+                }
+                
+                if (!size) {
+                  size = 16;
+                }
+                
+                const formatScore = formatPriority[format] || 10;
+                const sizeScore = Math.max(0, 100 - size / 10);
+                const totalScore = formatScore * 1000 + sizeScore;
+                
+                candidates.push({
+                  href,
+                  format,
+                  size,
+                  score: totalScore,
+                });
+              }
+            }
+            
+            if (candidates.length > 0) {
+              candidates.sort((a, b) => a.score - b.score);
+              return candidates[0].href;
+            }
+            
+            if (location.origin && !location.protocol.startsWith('file')) {
+              return location.origin + '/favicon.ico';
+            }
+            
+            return '';
+          }
+          
+          // Self-contained getSelectedText implementation
+          function getSelectedText() {
+            if (window.getSelection) {
+              return window.getSelection().toString();
+            }
+            return '';
+          }
+          
+          // Create and return page info
+          return {
+            title: document.title,
+            url: window.location.href,
+            favicon: getFavicon(),
+            selected: getSelectedText(),
+            timestamp: new Date().toISOString(),
+            user_agent: navigator.userAgent,
+          };
+        },
       });
 
       if (!results || !results[0] || !results[0].result) {
@@ -505,6 +611,11 @@ async function sendToHomeAssistant(options) {
       }
 
       pageInfo = results[0].result;
+      
+      // Use extension icon as fallback if favicon is empty
+      if (!pageInfo.favicon) {
+        pageInfo.favicon = chrome.runtime.getURL('icon-256.png');
+      }
       
       // Validate favicon URL
       pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
