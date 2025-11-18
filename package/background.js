@@ -17,22 +17,47 @@ importScripts('utils.js');
  * Initialize context menus when extension is installed or updated
  */
 chrome.runtime.onInstalled.addListener(() => {
+  createContextMenus();
+});
+
+/**
+ * Create context menus from stored configuration
+ */
+function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
-    // Parent menu
-    chrome.contextMenus.create({
-      id: 'send-to-ha-parent',
-      title: 'Send to Home Assistant',
-      contexts: ['page', 'selection', 'link'],
+    // Get stored context menu items
+    chrome.storage.sync.get(['contextMenuItems'], (result) => {
+      let menuItems = [{ id: 'default', name: 'Default' }]; // Default fallback
+      
+      if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
+        menuItems = result.contextMenuItems;
+      }
+      
+      // Parent menu
+      chrome.contextMenus.create({
+        id: 'send-to-ha-parent',
+        title: 'Send to Home Assistant',
+        contexts: ['page', 'selection', 'link'],
+      });
+      
+      // Create sub-menu for each item
+      menuItems.forEach((item) => {
+        chrome.contextMenus.create({
+          id: `send-to-ha-${item.id}`,
+          parentId: 'send-to-ha-parent',
+          title: item.name,
+          contexts: ['page', 'selection', 'link'],
+        });
+      });
     });
-    // Default sub-option
-    chrome.contextMenus.create({
-      id: 'send-to-ha-default',
-      parentId: 'send-to-ha-parent',
-      title: 'Default',
-      contexts: ['page', 'selection', 'link'],
-    });
-    // Future sub-options can be added here
   });
+}
+
+// Also recreate menus when storage changes (options page updates)
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'sync' && changes.contextMenuItems) {
+    createContextMenus();
+  }
 });
 
 /**
@@ -50,21 +75,38 @@ chrome.contextMenus.onClicked.addListener(async(info, tab) => {
     return;
   }
 
-  if (info.menuItemId === 'send-to-ha-default') {
-    await handleContextMenuSend(info, tab);
+  // Extract context from menu item ID (e.g., 'send-to-ha-default' -> 'default')
+  const menuItemId = info.menuItemId;
+  if (typeof menuItemId === 'string' && menuItemId.startsWith('send-to-ha-')) {
+    const contextId = menuItemId.replace('send-to-ha-', '');
+    
+    // Get the menu item name from storage
+    chrome.storage.sync.get(['contextMenuItems'], async(result) => {
+      let contextName = contextId; // Default to ID if not found
+      
+      if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
+        const menuItem = result.contextMenuItems.find(item => item.id === contextId);
+        if (menuItem) {
+          contextName = menuItem.name;
+        }
+      }
+      
+      await handleContextMenuSend(info, tab, contextName);
+    });
   }
-  // Future sub-options can be handled here
 });
 
 /**
  * Handle sending from context menu
  * @param {object} info - Context menu info
  * @param {object} tab - Tab information
+ * @param {string} contextName - Name of the context menu item used
  */
-async function handleContextMenuSend(info, tab) {
+async function handleContextMenuSend(info, tab, contextName) {
   await ExtensionUtils.sendToHomeAssistant({
     tab,
     contextInfo: info,
+    context: contextName,
   });
 }
 

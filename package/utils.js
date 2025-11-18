@@ -419,6 +419,7 @@ async function sendToWebhook(webhookUrl, data) {
  * @param {object} options - Configuration options
  * @param {object} options.tab - Tab information
  * @param {object} [options.contextInfo] - Context menu info (for right-click)
+ * @param {string} [options.context] - Context menu name (e.g., "Default", "Automation")
  * @param {Function} [options.onProgress] - Progress callback (message) => void
  * @param {Function} [options.onSuccess] - Success callback (data) => void
  * @param {Function} [options.onError] - Error callback (error) => void
@@ -430,6 +431,7 @@ async function sendToHomeAssistant(options) {
   const {
     tab,
     contextInfo,
+    context,
     onProgress,
     onSuccess,
     onError,
@@ -514,6 +516,11 @@ async function sendToHomeAssistant(options) {
     }
     if (config.deviceName) {
       pageInfo.device = config.deviceName;
+    }
+    
+    // Add context information if provided (from context menu)
+    if (context) {
+      pageInfo.context = context;
     }
 
     // Send to webhook

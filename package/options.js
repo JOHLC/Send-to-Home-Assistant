@@ -21,6 +21,13 @@ const statusDiv = document.getElementById('status');
 const saveBtn = document.getElementById('save');
 const testBtn = document.getElementById('test');
 const clearBtn = document.getElementById('clearConfig');
+const newMenuItemInput = document.getElementById('newMenuItemName');
+const addMenuItemBtn = document.getElementById('addMenuItem');
+const contextMenuItemsDiv = document.getElementById('contextMenuItems');
+
+// --- Context Menu Items Management ---
+
+let contextMenuItems = [{ id: 'default', name: 'Default' }]; // Default item always present
 
 // --- Initialization ---
 
@@ -33,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadSavedConfiguration();
   setupEventListeners();
   updateSslWarning();
+  loadContextMenuItems();
 });
 
 /**
@@ -144,6 +152,116 @@ function loadSavedConfiguration() {
 }
 
 /**
+ * Load context menu items from storage
+ */
+function loadContextMenuItems() {
+  chrome.storage.sync.get(['contextMenuItems'], (result) => {
+    if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
+      contextMenuItems = result.contextMenuItems;
+    }
+    renderContextMenuItems();
+  });
+}
+
+/**
+ * Render context menu items in the UI
+ */
+function renderContextMenuItems() {
+  contextMenuItemsDiv.innerHTML = '';
+  
+  contextMenuItems.forEach((item, index) => {
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'menu-item';
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'menu-item-name';
+    nameSpan.textContent = item.name;
+    
+    // Add "Default" indicator for the default item
+    if (item.id === 'default') {
+      const defaultSpan = document.createElement('span');
+      defaultSpan.className = 'menu-item-default';
+      defaultSpan.textContent = '(Default)';
+      nameSpan.appendChild(defaultSpan);
+    }
+    
+    itemDiv.appendChild(nameSpan);
+    
+    // Only allow removing non-default items
+    if (item.id !== 'default') {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'menu-item-remove';
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', () => removeContextMenuItem(index));
+      itemDiv.appendChild(removeBtn);
+    }
+    
+    contextMenuItemsDiv.appendChild(itemDiv);
+  });
+}
+
+/**
+ * Add a new context menu item
+ */
+function addContextMenuItem() {
+  const name = newMenuItemInput.value.trim();
+  
+  if (!name) {
+    showStatus('Please enter a menu item name.', 'error');
+    return;
+  }
+  
+  if (name.length > 32) {
+    showStatus('Menu item name cannot exceed 32 characters.', 'error');
+    return;
+  }
+  
+  // Check for duplicate names
+  if (contextMenuItems.some(item => item.name.toLowerCase() === name.toLowerCase())) {
+    showStatus('A menu item with this name already exists.', 'error');
+    return;
+  }
+  
+  // Generate unique ID
+  const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  
+  contextMenuItems.push({ id, name });
+  
+  // Save to storage
+  chrome.storage.sync.set({ contextMenuItems }, () => {
+    renderContextMenuItems();
+    newMenuItemInput.value = '';
+    showStatus('Menu item added! Click "Save" to apply changes.', 'success');
+    setTimeout(clearStatus, 2000);
+  });
+}
+
+/**
+ * Remove a context menu item
+ * @param {number} index - Index of the item to remove
+ */
+function removeContextMenuItem(index) {
+  if (index < 0 || index >= contextMenuItems.length) {
+    return;
+  }
+  
+  // Don't allow removing the default item
+  if (contextMenuItems[index].id === 'default') {
+    showStatus('Cannot remove the default menu item.', 'error');
+    return;
+  }
+  
+  contextMenuItems.splice(index, 1);
+  
+  // Save to storage
+  chrome.storage.sync.set({ contextMenuItems }, () => {
+    renderContextMenuItems();
+    showStatus('Menu item removed! Click "Save" to apply changes.', 'success');
+    setTimeout(clearStatus, 2000);
+  });
+}
+
+/**
  * Setup event listeners for various UI elements
  */
 function setupEventListeners() {
@@ -159,6 +277,20 @@ function setupEventListeners() {
   // Clear config button handler
   if (clearBtn) {
     clearBtn.addEventListener('click', handleClearConfig);
+  }
+  
+  // Add menu item button handler
+  if (addMenuItemBtn) {
+    addMenuItemBtn.addEventListener('click', addContextMenuItem);
+  }
+  
+  // Allow adding menu item by pressing Enter
+  if (newMenuItemInput) {
+    newMenuItemInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        addContextMenuItem();
+      }
+    });
   }
 }
 
@@ -226,7 +358,7 @@ function handleTest() {
  * Handle clear config button click
  */
 function handleClearConfig() {
-  chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], () => {
+  chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'contextMenuItems'], () => {
     // Clear form fields
     hostInput.value = '';
     sslToggle.checked = true;
@@ -235,6 +367,10 @@ function handleClearConfig() {
     if (deviceInput) {
       deviceInput.value = '';
     }
+    
+    // Reset context menu items to default
+    contextMenuItems = [{ id: 'default', name: 'Default' }];
+    renderContextMenuItems();
     
     showStatus('Config cleared!', 'success');
     setTimeout(clearStatus, 2000);
