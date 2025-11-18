@@ -222,18 +222,18 @@ function addContextMenuItem() {
     return;
   }
   
-  // Generate unique ID
-  const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-
-  // Validate ID is not empty
-  if (!id) {
-    showStatus('Menu item name must contain at least one letter or number.', 'error');
-    return;
+  // Generate unique ID (with numeric suffix if needed)
+  let baseId = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  let id = baseId;
+  let suffix = 2;
+  while (contextMenuItems.some(item => item.id === id)) {
+    id = `${baseId}-${suffix}`;
+    suffix++;
   }
 
-  // Check for duplicate IDs
-  if (contextMenuItems.some(item => item.id === id)) {
-    showStatus('A menu item with a conflicting ID already exists. Please choose a different name.', 'error');
+  // Validate ID is not empty
+  if (!baseId) {
+    showStatus('Menu item name must contain at least one letter or number.', 'error');
     return;
   }
   contextMenuItems.push({ id, name });
