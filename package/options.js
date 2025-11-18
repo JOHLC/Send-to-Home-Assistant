@@ -224,7 +224,18 @@ function addContextMenuItem() {
   
   // Generate unique ID
   const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  
+
+  // Validate ID is not empty
+  if (!id) {
+    showStatus('Menu item name must contain at least one letter or number.', 'error');
+    return;
+  }
+
+  // Check for duplicate IDs
+  if (contextMenuItems.some(item => item.id === id)) {
+    showStatus('A menu item with a conflicting ID already exists. Please choose a different name.', 'error');
+    return;
+  }
   contextMenuItems.push({ id, name });
   
   // Save to storage
