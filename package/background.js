@@ -27,6 +27,13 @@ function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     // Get stored context menu items
     chrome.storage.sync.get(['contextMenuItems'], (result) => {
+      // Check for storage errors
+      if (chrome.runtime.lastError) {
+        console.error('Error loading context menu items:', chrome.runtime.lastError);
+        // Use default fallback on error
+        result = {};
+      }
+      
       let menuItems = [{ id: 'default', name: 'Default' }]; // Default fallback
       
       if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
@@ -102,7 +109,14 @@ chrome.contextMenus.onClicked.addListener(async(info, tab) => {
     
     // Get the menu item name from storage
     chrome.storage.sync.get(['contextMenuItems'], async(result) => {
-      let contextName;
+      if (chrome.runtime.lastError) {
+        console.error('Error accessing storage:', chrome.runtime.lastError);
+        // Fall back to using the context ID as the name
+        await handleContextMenuSend(info, tab, contextId);
+        return;
+      }
+      
+      let contextName = contextId; // Default to ID if not found
       
       if (result.contextMenuItems && Array.isArray(result.contextMenuItems)) {
         const menuItem = result.contextMenuItems.find(item => item.id === contextId);
