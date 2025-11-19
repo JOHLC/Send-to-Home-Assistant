@@ -499,44 +499,62 @@ async function sendToHomeAssistant(options) {
       // To avoid code duplication, we pass the getFavicon function as a string argument
       const getFaviconStr = getFavicon.toString();
       
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (getFaviconCode) => {
-          // Reconstruct getFavicon function from string using eval in the page context
-          // This is safe because we control the source code and the execution happens
-          // in the page context, not in the extension context
-          // eslint-disable-next-line no-eval
-          const getFavicon = eval('(' + getFaviconCode + ')');
-          
-          // Self-contained getSelectedText implementation
-          function getSelectedText() {
-            if (window.getSelection) {
-              return window.getSelection().toString();
+      let results;
+      try {
+        results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (getFaviconCode) => {
+            // Reconstruct getFavicon function from string using eval in the page context
+            // This is safe because we control the source code and the execution happens
+            // in the page context, not in the extension context
+            // eslint-disable-next-line no-eval
+            const getFavicon = eval('(' + getFaviconCode + ')');
+            
+            // Self-contained getSelectedText implementation
+            function getSelectedText() {
+              if (window.getSelection) {
+                return window.getSelection().toString();
+              }
+              return '';
             }
-            return '';
-          }
-          
-          // Create and return page info
-          return {
-            title: document.title,
-            url: window.location.href,
-            favicon: getFavicon(),
-            selected: getSelectedText(),
-            timestamp: new Date().toISOString(),
-            user_agent: navigator.userAgent,
-          };
-        },
-        args: [getFaviconStr],
-      });
-
-      if (!results || !results[0] || !results[0].result) {
-        throw new Error('Could not get page info.');
+            
+            // Create and return page info
+            return {
+              title: document.title,
+              url: window.location.href,
+              favicon: getFavicon(),
+              selected: getSelectedText(),
+              timestamp: new Date().toISOString(),
+              user_agent: navigator.userAgent,
+            };
+          },
+          args: [getFaviconStr],
+        });
+      } catch (scriptError) {
+        // Script injection failed - fall back to tab properties
+        console.error('Script injection failed, using tab properties:', scriptError);
+        const validatedFavicon = await validateFaviconUrl(tab.favIconUrl);
+        
+        pageInfo = {
+          title: tab.title || 'Unknown',
+          url: tab.url,
+          favicon: validatedFavicon,
+          selected: '',
+          timestamp: new Date().toISOString(),
+          user_agent: navigator.userAgent,
+        };
       }
 
-      pageInfo = results[0].result;
-      
-      // Validate favicon URL (handles empty/invalid URLs with fallback internally)
-      pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
+      if (!pageInfo && (!results || !results[0] || !results[0].result)) {
+        throw new Error('Could not get page info. Script injection failed and tab properties are unavailable.');
+      }
+
+      if (!pageInfo) {
+        pageInfo = results[0].result;
+        
+        // Validate favicon URL (handles empty/invalid URLs with fallback internally)
+        pageInfo.favicon = await validateFaviconUrl(pageInfo.favicon);
+      }
     }
 
     // Add user and device information
