@@ -251,16 +251,15 @@ function getSelectedText() {
 /**
  * Creates page information object for sending to webhook
  * This function must be self-contained for chrome.scripting.executeScript
- * @param {object} options - Additional options (user, device, etc.)
+ * NOTE: Cannot use default parameters or spread operators when injecting
  * @returns {object} Page information object
  */
-function createPageInfo(options = {}) {
-  // Get favicon (inline implementation)
-  function getFaviconInline() {
+function createPageInfo() {
+  // Get favicon
+  let favicon = '';
+  try {
     const links = document.getElementsByTagName('link');
-    const formatPriority = {
-      'png': 1, 'jpg': 2, 'jpeg': 2, 'webp': 3, 'ico': 4, 'svg': 10,
-    };
+    const formatPriority = {'png': 1, 'jpg': 2, 'jpeg': 2, 'webp': 3, 'ico': 4, 'svg': 10};
     const candidates = [];
     
     for (let i = 0; i < links.length; i++) {
@@ -301,38 +300,37 @@ function createPageInfo(options = {}) {
         const sizeScore = Math.max(0, 100 - size / 10);
         const totalScore = formatScore * 1000 + sizeScore;
         
-        candidates.push({ href, format, size, score: totalScore });
+        candidates.push({href: href, score: totalScore});
       }
     }
     
     if (candidates.length > 0) {
-      candidates.sort((a, b) => a.score - b.score);
-      return candidates[0].href;
+      candidates.sort(function(a, b) {return a.score - b.score;});
+      favicon = candidates[0].href;
+    } else if (location.origin && !location.protocol.startsWith('file')) {
+      favicon = location.origin + '/favicon.ico';
     }
-    
-    if (location.origin && !location.protocol.startsWith('file')) {
-      return location.origin + '/favicon.ico';
-    }
-    
-    return '';
+  } catch (e) {
+    favicon = location.origin + '/favicon.ico';
   }
   
-  // Get selected text (inline implementation)
-  function getSelectedTextInline() {
+  // Get selected text
+  let selected = '';
+  try {
     if (window.getSelection) {
-      return window.getSelection().toString();
+      selected = window.getSelection().toString();
     }
-    return '';
+  } catch (e) {
+    selected = '';
   }
   
   return {
     title: document.title,
     url: window.location.href,
-    favicon: getFaviconInline(),
-    selected: getSelectedTextInline(),
+    favicon: favicon,
+    selected: selected,
     timestamp: new Date().toISOString(),
-    user_agent: navigator.userAgent,
-    ...options,
+    user_agent: navigator.userAgent
   };
 }
 
