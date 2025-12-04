@@ -151,12 +151,26 @@ if (chrome.runtime.onStartup) {
 let lastSendStatus = null;
 
 /**
- * Handle messages from popup
+ * Handle messages from popup and options page
  */
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.popupOpened) {
     sendResponse(lastSendStatus || { status: 'pending' });
+    return false;
   }
+  
+  if (msg && msg.type === 'settings-changed') {
+    console.log('Settings changed, updating auto-update alarm...');
+    setupAutoUpdateAlarm(msg.autoUpdate, msg.updateInterval).then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      console.error('Failed to setup alarm:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Will respond asynchronously
+  }
+  
+  return false;
 });
 
 /**
@@ -336,14 +350,20 @@ async function handleAutoUpdateAlarm(alarm) {
     return;
   }
   
-  console.log('Auto-update alarm triggered, sending active tab...');
+  console.log('Auto-update alarm triggered at', new Date().toISOString());
   
-  // Send active tab without showing page alert or notifications
-  // (to avoid spamming the user with notifications every interval)
-  await sendActiveTabToHomeAssistant({
-    showPageAlert: false,
-    showNotifications: false,
-  });
+  try {
+    // Send active tab without showing page alert or notifications
+    // (to avoid spamming the user with notifications every interval)
+    const result = await sendActiveTabToHomeAssistant({
+      showPageAlert: false,
+      showNotifications: false,
+    });
+    
+    console.log('Auto-update result:', result.status);
+  } catch (error) {
+    console.error('Auto-update failed:', error);
+  }
 }
 
 /**
@@ -362,15 +382,6 @@ async function initializeAutoUpdate() {
 
 // Listen for alarm triggers
 chrome.alarms.onAlarm.addListener(handleAutoUpdateAlarm);
-
-// Listen for settings changes from options page
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === 'settings-changed') {
-    console.log('Settings changed, updating auto-update alarm...');
-    setupAutoUpdateAlarm(msg.autoUpdate, msg.updateInterval);
-    sendResponse({ success: true });
-  }
-});
 
 // Initialize auto-update on startup
 initializeAutoUpdate();
