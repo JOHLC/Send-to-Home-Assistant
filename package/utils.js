@@ -250,15 +250,86 @@ function getSelectedText() {
 
 /**
  * Creates page information object for sending to webhook
+ * This function must be self-contained for chrome.scripting.executeScript
  * @param {object} options - Additional options (user, device, etc.)
  * @returns {object} Page information object
  */
 function createPageInfo(options = {}) {
+  // Get favicon (inline implementation)
+  function getFaviconInline() {
+    const links = document.getElementsByTagName('link');
+    const formatPriority = {
+      'png': 1, 'jpg': 2, 'jpeg': 2, 'webp': 3, 'ico': 4, 'svg': 10,
+    };
+    const candidates = [];
+    
+    for (let i = 0; i < links.length; i++) {
+      const rel = links[i].rel;
+      const href = links[i].href;
+      
+      if (rel && rel.toLowerCase().includes('icon') && href && !rel.toLowerCase().includes('apple')) {
+        if (href.startsWith('file://')) {continue;}
+        
+        let format = '';
+        const typeAttr = links[i].type;
+        if (typeAttr) {
+          const match = typeAttr.match(/image\/([a-zA-Z0-9-]+)/);
+          if (match) {format = match[1].toLowerCase();}
+        } else {
+          const urlMatch = href.match(/\.(\w+)(\?.*)?$/);
+          if (urlMatch) {format = urlMatch[1].toLowerCase();}
+        }
+        
+        if (format === 'x-icon') {format = 'ico';}
+        
+        let size = 0;
+        if (links[i].sizes && links[i].sizes.value) {
+          const sizes = links[i].sizes.value.split(' ');
+          for (const s of sizes) {
+            if (s === 'any') {continue;}
+            const parts = s.split('x');
+            if (parts.length === 2) {
+              const n = parseInt(parts[0], 10);
+              if (n > size) {size = n;}
+            }
+          }
+        }
+        
+        if (!size) {size = 16;}
+        
+        const formatScore = formatPriority[format] || 10;
+        const sizeScore = Math.max(0, 100 - size / 10);
+        const totalScore = formatScore * 1000 + sizeScore;
+        
+        candidates.push({ href, format, size, score: totalScore });
+      }
+    }
+    
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => a.score - b.score);
+      return candidates[0].href;
+    }
+    
+    if (location.origin && !location.protocol.startsWith('file')) {
+      return location.origin + '/favicon.ico';
+    }
+    
+    return '';
+  }
+  
+  // Get selected text (inline implementation)
+  function getSelectedTextInline() {
+    if (window.getSelection) {
+      return window.getSelection().toString();
+    }
+    return '';
+  }
+  
   return {
     title: document.title,
     url: window.location.href,
-    favicon: getFavicon(),
-    selected: getSelectedText(),
+    favicon: getFaviconInline(),
+    selected: getSelectedTextInline(),
     timestamp: new Date().toISOString(),
     user_agent: navigator.userAgent,
     ...options,
