@@ -492,16 +492,36 @@ async function sendToHomeAssistant(options) {
       };
     } else {
       // Direct send scenario - get page info via scripting
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: createPageInfo,
-      });
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: createPageInfo,
+          world: 'ISOLATED', // Run in isolated world for better compatibility
+        });
 
-      if (!results || !results[0] || !results[0].result) {
-        throw new Error('Could not get page info.');
+        console.log('Script execution results:', results);
+
+        if (!results || results.length === 0) {
+          throw new Error('Script execution returned no results. Tab may not be injectable or page may not be loaded.');
+        }
+
+        const result = results[0];
+        
+        if (result.error) {
+          throw new Error('Script execution error: ' + result.error);
+        }
+
+        if (!result.result) {
+          throw new Error('Script execution returned empty result');
+        }
+
+        pageInfo = result.result;
+        console.log('Page info retrieved:', pageInfo);
+      } catch (scriptError) {
+        console.error('Script execution failed:', scriptError);
+        console.error('Tab info:', {id: tab.id, url: tab.url, status: tab.status});
+        throw new Error('Could not get page info: ' + scriptError.message);
       }
-
-      pageInfo = results[0].result;
     }
 
     // Add user and device information

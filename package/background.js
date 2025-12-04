@@ -208,8 +208,11 @@ async function sendActiveTabToHomeAssistant(options = {}) {
   // Get the active tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
+  console.log('Active tab for send:', tab ? {id: tab.id, url: tab.url, title: tab.title} : 'NONE');
+  
   if (!tab || !tab.id) {
     const error = new Error('No active tab found');
+    console.error('No active tab:', error);
     lastSendStatus = { status: 'error', error: error.message };
     return { status: 'error', error: error.message };
   }
@@ -217,6 +220,7 @@ async function sendActiveTabToHomeAssistant(options = {}) {
   // Check for restricted pages
   if (ExtensionUtils.isRestrictedPage(tab.url)) {
     const errorMessage = 'This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.';
+    console.warn('Restricted page:', tab.url);
     if (showNotifications) {
       ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
     }
