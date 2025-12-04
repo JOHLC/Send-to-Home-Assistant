@@ -1,143 +1,244 @@
-# Auto-Update Feature Implementation
+# Auto-Update Feature
 
 ## Overview
-This document describes the optional auto-update feature that has been added to the "Send to Home Assistant" browser extension.
 
-## What Was Implemented
+The auto-update feature allows the extension to automatically send the active tab's information to your Home Assistant webhook at a specified interval. This is useful for tracking your browsing activity, creating time-based automations, or monitoring what you're currently viewing.
 
-### 1. User Interface (options.html)
-Added two new settings in the options page:
-- **Enable Auto-Update**: A checkbox to enable/disable automatic sending of active tab data
-- **Update Interval**: A number input to set the interval in seconds (minimum 5 seconds, default 60)
+## Features
 
-The interval input is only visible when auto-update is enabled.
+- **Optional**: Disabled by default, must be explicitly enabled in settings
+- **Configurable interval**: Set update frequency in seconds (minimum 60 seconds)
+- **Silent operation**: Runs in the background without showing notifications
+- **Respects restrictions**: Won't send data from browser internal pages (chrome://, edge://, etc.)
+- **Persistent**: Uses Chrome Alarms API to survive browser restarts
 
-### 2. Settings Management (options.js)
-Updated the options script to:
-- Save and restore `autoUpdate` (boolean) and `updateInterval` (number) settings
-- Validate that the interval is at least 5 seconds
-- Show/hide the interval input based on the checkbox state
-- Notify the background script when settings change
-- Clear auto-update settings when "Clear Config" is clicked
+## User Guide
 
-### 3. Manifest Updates (manifest.json)
-Added the `alarms` permission required for the Chrome Alarms API.
+### Enabling Auto-Update
 
-### 4. Background Script (background.js)
-Implemented the auto-update mechanism:
+1. Right-click the extension icon and select **Options**
+2. Scroll to the **Enable Auto-Update** checkbox
+3. Check the box to enable automatic updates
+4. Set your desired **Update Interval** in seconds (minimum 60)
+5. Click **Save**
 
-#### New Functions:
-- **`sendActiveTabToHomeAssistant(options)`**: Reusable function that gets the active tab and sends it to Home Assistant. Can be configured to show/hide page alerts and notifications.
-  
-- **`setupAutoUpdateAlarm(enabled, intervalSeconds)`**: Sets up or clears the Chrome alarm based on user settings.
+### Disabling Auto-Update
 
-- **`handleAutoUpdateAlarm(alarm)`**: Handles alarm triggers and sends the active tab data silently (no notifications or page alerts to avoid spam).
+1. Open the extension **Options**
+2. Uncheck the **Enable Auto-Update** checkbox
+3. Click **Save**
 
-- **`initializeAutoUpdate()`**: Loads settings from storage and initializes the alarm on extension startup.
+### Recommended Settings
 
-#### Event Listeners:
-- `chrome.alarms.onAlarm`: Listens for alarm triggers
-- `chrome.runtime.onMessage`: Listens for settings changes from the options page
-- `chrome.runtime.onStartup`: Re-initializes the alarm when the browser starts
+- **Minimum interval**: 60 seconds (1 minute)
+- **Typical use**: 300 seconds (5 minutes) or 600 seconds (10 minutes)
+- **Light tracking**: 900 seconds (15 minutes) or more
 
-## How It Works
+**Note**: Chrome enforces a minimum interval of 60 seconds for periodic alarms. While the UI allows entering smaller values for development purposes, intervals less than 60 seconds may not work reliably in production.
 
-1. **User enables auto-update** in the extension options and sets an interval (e.g., 60 seconds)
-2. **Settings are saved** to `chrome.storage.sync` and the background script is notified
-3. **Background script creates an alarm** using the Chrome Alarms API
-4. **Every interval, the alarm fires** and triggers `sendActiveTabToHomeAssistant()`
-5. **Active tab data is sent** to Home Assistant silently (no notifications to avoid spamming)
-6. **If settings change**, the alarm is updated or cleared accordingly
+## Technical Implementation
 
-## Important Notes
+### Architecture
 
-### Chrome Alarms API Limitations
-- **Minimum interval**: Chrome's Alarms API has a minimum interval of 1 minute (60 seconds) in production builds
-- **Development builds**: Can use shorter intervals, but users should be aware this may not work in production
-- **Workaround**: The implementation converts seconds to minutes (`intervalSeconds / 60`) to work with the API
+The auto-update feature is implemented using:
 
-### Silent Updates
-Auto-updates are sent **silently** to avoid spamming the user with notifications every interval. The following are disabled for auto-updates:
-- Browser notifications
-- In-page alerts
+1. **Chrome Alarms API**: Provides persistent, reliable scheduled tasks that survive service worker restarts
+2. **Storage API**: Saves user preferences (enabled state and interval) to `chrome.storage.sync`
+3. **Tabs API**: Queries for the active tab in the current window
+4. **Scripting API**: Injects code to extract page information
 
-Manual sends (via icon click or context menu) still show all notifications and alerts.
+### Files Modified
 
-### Restricted Pages
-The extension cannot send data from browser internal pages (chrome://, edge://, about:, etc.). Auto-updates will fail silently on these pages.
+#### `manifest.json`
+- Added `"alarms"` permission
 
-### Settings Synchronization
-All settings (including auto-update preferences) are stored in `chrome.storage.sync`, so they sync across devices where the user is signed in.
+#### `options.html`
+- Added checkbox: "Enable Auto-Update"
+- Added number input: "Update Interval (seconds)"
+- Interval input visibility toggles based on checkbox state
 
-## Testing the Feature
+#### `options.js`
+- Added `autoUpdate` (boolean) and `updateInterval` (number) to configuration
+- Validates interval is ≥ 5 seconds
+- Sends message to background script when settings change
+- Clears auto-update alarm when settings are disabled
 
-1. **Install/reload the extension** with the updated code
-2. **Open the options page** (right-click extension icon → Options)
-3. **Configure your Home Assistant** settings (host, webhook ID, etc.)
-4. **Enable "Enable Auto-Update"** checkbox
-5. **Set an interval** (e.g., 60 seconds for 1 minute)
-6. **Click Save**
-7. **Navigate to a regular website** (not chrome:// pages)
-8. **Wait for the interval** to pass and check your Home Assistant logs to confirm data is being sent
+#### `background.js`
+- **`sendActiveTabToHomeAssistant()`**: Reusable function that queries for active tab and sends data
+- **`setupAutoUpdateAlarm()`**: Creates or clears the Chrome alarm based on settings
+- **`handleAutoUpdateAlarm()`**: Handles alarm triggers and initiates sending
+- **`initializeAutoUpdate()`**: Loads settings and sets up alarm on extension startup
+- Listens for `settings-changed` messages from options page
+- Auto-updates send silently (no notifications or page alerts)
 
-## Verifying It Works
+#### `utils.js`
+- **`createPageInfo()`**: Made self-contained for proper script injection
+  - Uses traditional JavaScript syntax (no default parameters or spread operators)
+  - Inline implementations of helper functions
+  - Compatible with Chrome's script serialization
 
-### Check Browser Console
-Open the extension's service worker console:
-1. Go to `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "service worker" link under your extension
-4. Look for console messages:
-   - "Initializing auto-update: enabled=true, interval=60s"
-   - "Setting up auto-update alarm with interval: 60 seconds"
-   - "Auto-update alarm triggered, sending active tab..."
+### Data Flow
 
-### Check Home Assistant Logs
-In Home Assistant, create an automation that listens to your webhook and logs the data:
+1. User enables auto-update in options
+2. Options page saves settings to `chrome.storage.sync`
+3. Options page sends `settings-changed` message to background script
+4. Background script calls `setupAutoUpdateAlarm()` with new settings
+5. Chrome creates a periodic alarm with specified interval
+6. When alarm fires:
+   - `handleAutoUpdateAlarm()` is triggered
+   - Calls `sendActiveTabToHomeAssistant()` with silent mode
+   - Queries for active tab
+   - Executes `createPageInfo()` in page context to extract data
+   - Sends data to configured webhook
+7. Repeat every interval
 
-```yaml
-automation:
-  - alias: "Log Browser Extension Data"
-    trigger:
-      - platform: webhook
-        webhook_id: your-webhook-id-here
-    action:
-      - service: system_log.write
-        data:
-          message: "Received from browser: {{ trigger.json.title }} - {{ trigger.json.url }}"
-          level: info
+### Storage Keys
+
+- `autoUpdate` (boolean): Whether auto-update is enabled
+- `updateInterval` (number): Update interval in seconds
+
+### Message Types
+
+- `settings-changed`: Sent from options.js to background.js when settings are saved
+  - Payload: `{type: 'settings-changed', autoUpdate: boolean, updateInterval: number}`
+
+## Known Limitations
+
+### Chrome Alarms API Constraints
+
+- **Minimum interval**: Chrome enforces a 60-second (1 minute) minimum for periodic alarms in production
+- **Development mode**: Shorter intervals may work with unpacked extensions but shouldn't be relied upon
+- **Precision**: Alarms may not fire at exact intervals due to browser optimization
+
+### Page Restrictions
+
+Auto-update cannot send data from:
+- Browser internal pages: `chrome://`, `edge://`, `about:`, etc.
+- Extension pages: `chrome-extension://`, `moz-extension://`
+- Some pages with strict Content Security Policy (CSP)
+
+When auto-update encounters a restricted page, it fails silently and waits for the next interval.
+
+### Active Tab Requirement
+
+- Auto-update sends data for the **currently active tab** in the **focused window**
+- If no browser window is active, the update is skipped
+- If multiple windows are open, only the active tab in the focused window is tracked
+
+### Performance Considerations
+
+- Each auto-update performs a script injection into the active page
+- Very short intervals (even if possible) could impact browser performance
+- Recommended minimum: 60 seconds (enforced by Chrome)
+- Recommended typical: 300-900 seconds (5-15 minutes)
+
+## Privacy & Security
+
+### Data Handling
+
+- Auto-update uses the same data collection and sending mechanism as manual sends
+- All data is sent **only** to the user-configured Home Assistant webhook
+- No data is sent to third parties or external servers
+- No data is collected or stored by the extension author
+
+### What Data is Sent
+
+Each auto-update sends:
+- Page title
+- Page URL
+- Favicon URL
+- Selected text (if any)
+- Timestamp
+- User agent
+- User name (if configured)
+- Device name (if configured)
+
+### Silent Operation
+
+- Auto-updates intentionally do **not** show browser notifications
+- Auto-updates do **not** show in-page alerts
+- This prevents notification spam every interval
+- Manual sends (icon click, context menu) still show all notifications
+
+## Troubleshooting
+
+### Auto-Update Not Working
+
+1. **Verify it's enabled**: Check options page, ensure checkbox is checked
+2. **Check interval**: Must be ≥ 60 seconds
+3. **Reload extension**: After enabling, reload the extension at `chrome://extensions`
+4. **Check active tab**: Must have a regular website open (not chrome:// pages)
+5. **Check service worker**: Open service worker console at `chrome://extensions` and look for alarm messages
+
+### Verifying Auto-Update is Running
+
+Open the service worker console (`chrome://extensions` → click "service worker"):
+
+**On startup:**
+```
+Initializing auto-update: enabled=true, interval=60s
+Setting up auto-update alarm with interval: 60 seconds
+Auto-update alarm created successfully
 ```
 
-## Disabling Auto-Update
+**Every interval:**
+```
+Auto-update alarm triggered at [timestamp]
+Auto-update result: sent
+```
 
-To disable auto-update:
-1. Open the options page
-2. Uncheck "Enable Auto-Update"
-3. Click Save
+**If you see errors**, check that you're on a regular website, not a restricted page.
 
-The alarm will be cleared and no more automatic sends will occur.
+### Manual Alarm Check
 
-## Code Changes Summary
+In the service worker console:
+```javascript
+chrome.alarms.getAll(alarms => console.log('Alarms:', alarms));
+```
 
-### Files Modified:
-- `package/manifest.json`: Added "alarms" permission
-- `package/options.html`: Added auto-update checkbox and interval input
-- `package/options.js`: Added save/load/validate logic for auto-update settings
-- `package/background.js`: Added auto-update alarm mechanism and refactored send logic
+Should show an alarm named `ha-auto-update` if enabled.
 
-### Key Design Decisions:
-1. **Chrome Alarms API**: Used instead of `setInterval()` because service workers can be terminated, and alarms persist across worker restarts
-2. **Silent updates**: Disabled notifications for auto-updates to avoid spamming
-3. **Reusable send function**: Extracted `sendActiveTabToHomeAssistant()` so both manual and automatic sends use the same logic
-4. **Settings sync**: Auto-update settings are stored in `chrome.storage.sync` for cross-device synchronization
-5. **Minimum interval validation**: Enforced 5-second minimum in the UI, though Chrome enforces 1 minute minimum in production
+### Manual Settings Check
 
-## Future Enhancements (Optional)
+In the service worker console:
+```javascript
+chrome.storage.sync.get(['autoUpdate', 'updateInterval'], data => console.log('Settings:', data));
+```
 
-Consider these improvements:
-1. **Better interval presets**: Add quick-select buttons (1 min, 5 min, 15 min, 30 min)
-2. **Pause/resume**: Add a quick toggle to pause auto-update without changing settings
-3. **Last update timestamp**: Show when the last auto-update occurred
-4. **Error logging**: Track and display auto-update errors in the options page
-5. **Tab filtering**: Allow users to exclude certain URLs or domains from auto-update
-6. **Schedule windows**: Only send during certain hours (e.g., work hours)
+Should show your current configuration.
+
+## Development Notes
+
+### Testing
+
+When developing or testing:
+1. Reload extension after any code changes
+2. Use service worker console for debugging
+3. Test on simple pages first (e.g., google.com)
+4. Verify alarm is created: `chrome.alarms.getAll()`
+5. Monitor Home Assistant logs to confirm data is received
+
+### Code Style
+
+- Auto-update code follows the existing codebase style
+- Functions are documented with JSDoc comments
+- Error handling is comprehensive with console logging
+- Chrome APIs are used with proper error handling
+
+### Future Enhancements
+
+Potential improvements:
+- Pause/resume without changing settings
+- URL/domain filtering (exclude certain sites)
+- Scheduling windows (only during certain hours)
+- Last update timestamp display
+- Error tracking and reporting in options
+- Interval presets (1m, 5m, 15m, 30m buttons)
+
+## Credits
+
+Feature implemented as a contribution to the [Send to Home Assistant](https://github.com/JOHLC/Send-to-Home-Assistant) extension.
+
+## License
+
+This feature is part of the Send to Home Assistant extension and follows the same license as the main project.
