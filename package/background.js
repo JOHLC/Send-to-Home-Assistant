@@ -182,10 +182,75 @@ chrome.action.onClicked.addListener(async(tab) => {
 });
 
 /**
+ * Send active tab to Home Assistant (reusable function)
+ * @param {object} [options] - Optional configuration
+ * @param {boolean} [options.showPageAlert=true] - Whether to show in-page alert
+ * @param {boolean} [options.showNotifications=true] - Whether to show notifications
+ * @returns {Promise<object>} Result object
+ */
+async function sendActiveTabToHomeAssistant(options = {}) {
+  const { showPageAlert = true, showNotifications = true } = options;
+  
+  // Get the active tab
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+  if (!tab || !tab.id) {
+    const error = new Error('No active tab found');
+    lastSendStatus = { status: 'error', error: error.message };
+    return { status: 'error', error: error.message };
+  }
+
+  // Check for restricted pages
+  if (ExtensionUtils.isRestrictedPage(tab.url)) {
+    const errorMessage = 'This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.';
+    if (showNotifications) {
+      ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
+    }
+    lastSendStatus = { status: 'error', error: errorMessage };
+    return { status: 'error', error: errorMessage };
+  }
+
+  try {
+    const result = await ExtensionUtils.sendToHomeAssistant({
+      tab,
+      showNotifications,
+      onSuccess: async(_pageInfo) => {
+        lastSendStatus = { status: 'sent' };
+        // Inject in-page alert as fallback (only if enabled)
+        if (showPageAlert) {
+          await injectPageAlert(tab.id, 'Link sent to Home Assistant!');
+        }
+      },
+      onError: async(error) => {
+        lastSendStatus = { status: 'error', error: error.message };
+        // Inject in-page alert as fallback (only if enabled)
+        if (showPageAlert) {
+          await injectPageAlert(
+            tab.id,
+            `Error sending to Home Assistant: ${ExtensionUtils.escapeHTML(error.message)}`,
+          );
+        }
+      },
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Send failed:', error);
+    const errorMessage = `Failed to send: ${ExtensionUtils.escapeHTML(error.message)}`;
+    if (showNotifications) {
+      ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
+    }
+    lastSendStatus = { status: 'error', error: error.message };
+    return { status: 'error', error: error.message };
+  }
+}
+
+/**
  * Handle direct sending from extension icon
  * @param {object} tab - The active tab
  */
 async function handleDirectSend(tab) {
+  // Use the reusable function, passing the tab explicitly
   const result = await ExtensionUtils.sendToHomeAssistant({
     tab,
     onSuccess: async(_pageInfo) => {
@@ -226,4 +291,89 @@ async function injectPageAlert(tabId, message) {
     console.error('Failed to inject page alert:', error);
     // Silently fail - notification is primary feedback method
   }
+}
+
+// --- Auto-Update Mechanism ---
+
+const AUTO_UPDATE_ALARM_NAME = 'ha-auto-update';
+
+/**
+ * Setup or clear the auto-update alarm based on settings
+ * @param {boolean} enabled - Whether auto-update is enabled
+ * @param {number} intervalSeconds - Update interval in seconds
+ */
+async function setupAutoUpdateAlarm(enabled, intervalSeconds) {
+  // Clear existing alarm first
+  await chrome.alarms.clear(AUTO_UPDATE_ALARM_NAME);
+  
+  if (enabled && intervalSeconds >= 5) {
+    // Chrome alarms API requires intervals in minutes, but we can use periodInMinutes
+    // For intervals < 1 minute, we need to use a workaround
+    // Chrome alarms have a minimum of 1 minute for periodic alarms in production
+    // For development/testing, we can set shorter intervals
+    const intervalMinutes = intervalSeconds / 60;
+    
+    console.log(`Setting up auto-update alarm with interval: ${intervalSeconds} seconds (${intervalMinutes} minutes)`);
+    
+    // Create alarm with the specified interval
+    await chrome.alarms.create(AUTO_UPDATE_ALARM_NAME, {
+      delayInMinutes: intervalMinutes,
+      periodInMinutes: intervalMinutes,
+    });
+    
+    console.log('Auto-update alarm created successfully');
+  } else {
+    console.log('Auto-update alarm cleared');
+  }
+}
+
+/**
+ * Handle auto-update alarm trigger
+ * @param {object} alarm - Alarm information
+ */
+async function handleAutoUpdateAlarm(alarm) {
+  if (alarm.name !== AUTO_UPDATE_ALARM_NAME) {
+    return;
+  }
+  
+  console.log('Auto-update alarm triggered, sending active tab...');
+  
+  // Send active tab without showing page alert or notifications
+  // (to avoid spamming the user with notifications every interval)
+  await sendActiveTabToHomeAssistant({
+    showPageAlert: false,
+    showNotifications: false,
+  });
+}
+
+/**
+ * Initialize auto-update based on stored settings
+ */
+async function initializeAutoUpdate() {
+  chrome.storage.sync.get(['autoUpdate', 'updateInterval'], async(data) => {
+    const autoUpdate = typeof data.autoUpdate === 'boolean' ? data.autoUpdate : false;
+    const updateInterval = typeof data.updateInterval === 'number' ? data.updateInterval : 60;
+    
+    console.log(`Initializing auto-update: enabled=${autoUpdate}, interval=${updateInterval}s`);
+    
+    await setupAutoUpdateAlarm(autoUpdate, updateInterval);
+  });
+}
+
+// Listen for alarm triggers
+chrome.alarms.onAlarm.addListener(handleAutoUpdateAlarm);
+
+// Listen for settings changes from options page
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.type === 'settings-changed') {
+    console.log('Settings changed, updating auto-update alarm...');
+    setupAutoUpdateAlarm(msg.autoUpdate, msg.updateInterval);
+    sendResponse({ success: true });
+  }
+});
+
+// Initialize auto-update on startup
+initializeAutoUpdate();
+if (chrome.runtime.onStartup) {
+  chrome.runtime.onStartup.addListener(initializeAutoUpdate);
 }

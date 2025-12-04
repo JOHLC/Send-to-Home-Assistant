@@ -49,6 +49,16 @@
         Check for extension updates automatically
       </label>
     </div>
+    <div class="update-toggle-row">
+      <label for="autoUpdateToggle" class="update-toggle-label">
+        <input type="checkbox" id="autoUpdateToggle">
+        Enable Auto-Update (automatically send active tab data at intervals)
+      </label>
+    </div>
+    <div id="autoUpdateIntervalDiv" style="margin-left: 24px; display: none;">
+      <label for="updateInterval">Update Interval (seconds, minimum 5)</label>
+      <input type="number" id="updateInterval" min="5" value="60" style="width: 100px;">
+    </div>
     <div class="footer-row">
       <a href="https://github.com/JOHLC/Send-to-Home-Assistant" target="_blank" rel="noopener noreferrer" class="link-blue">
         View on GitHub

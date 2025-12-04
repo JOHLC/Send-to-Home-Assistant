@@ -21,6 +21,9 @@ const statusDiv = document.getElementById('status');
 const saveBtn = document.getElementById('save');
 const testBtn = document.getElementById('test');
 const clearBtn = document.getElementById('clearConfig');
+const autoUpdateToggle = document.getElementById('autoUpdateToggle');
+const updateIntervalInput = document.getElementById('updateInterval');
+const autoUpdateIntervalDiv = document.getElementById('autoUpdateIntervalDiv');
 
 // --- Initialization ---
 
@@ -124,7 +127,7 @@ function displayUpdateStatus(updateDiv) {
  * Load saved configuration from storage
  */
 function loadSavedConfiguration() {
-  chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
+  chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'autoUpdate', 'updateInterval'], (result) => {
     if (result.haHost) {
       hostInput.value = result.haHost;
     }
@@ -139,6 +142,15 @@ function loadSavedConfiguration() {
     }
     if (result.deviceName && deviceInput) {
       deviceInput.value = result.deviceName;
+    }
+    if (typeof result.autoUpdate === 'boolean' && autoUpdateToggle) {
+      autoUpdateToggle.checked = result.autoUpdate;
+      toggleAutoUpdateInterval();
+    }
+    if (result.updateInterval && updateIntervalInput) {
+      updateIntervalInput.value = result.updateInterval;
+    } else if (updateIntervalInput) {
+      updateIntervalInput.value = 60; // default
     }
   });
 }
@@ -159,6 +171,20 @@ function setupEventListeners() {
   // Clear config button handler
   if (clearBtn) {
     clearBtn.addEventListener('click', handleClearConfig);
+  }
+  
+  // Auto-update toggle handler
+  if (autoUpdateToggle) {
+    autoUpdateToggle.addEventListener('change', toggleAutoUpdateInterval);
+  }
+}
+
+/**
+ * Toggle visibility of auto-update interval input
+ */
+function toggleAutoUpdateInterval() {
+  if (autoUpdateToggle && autoUpdateIntervalDiv) {
+    autoUpdateIntervalDiv.style.display = autoUpdateToggle.checked ? 'block' : 'none';
   }
 }
 
@@ -226,7 +252,7 @@ function handleTest() {
  * Handle clear config button click
  */
 function handleClearConfig() {
-  chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], () => {
+  chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'autoUpdate', 'updateInterval'], () => {
     // Clear form fields
     hostInput.value = '';
     sslToggle.checked = true;
@@ -235,6 +261,20 @@ function handleClearConfig() {
     if (deviceInput) {
       deviceInput.value = '';
     }
+    if (autoUpdateToggle) {
+      autoUpdateToggle.checked = false;
+      toggleAutoUpdateInterval();
+    }
+    if (updateIntervalInput) {
+      updateIntervalInput.value = 60;
+    }
+    
+    // Notify background script that settings changed
+    chrome.runtime.sendMessage({ 
+      type: 'settings-changed',
+      autoUpdate: false,
+      updateInterval: 60,
+    });
     
     showStatus('Config cleared!', 'success');
     setTimeout(clearStatus, 2000);
@@ -302,6 +342,8 @@ function getFormConfiguration() {
     webhookId: webhookIdInput.value.trim(),
     user: userInput.value.trim(),
     device: deviceInput ? deviceInput.value.trim() : '',
+    autoUpdate: autoUpdateToggle ? autoUpdateToggle.checked : false,
+    updateInterval: updateIntervalInput ? parseInt(updateIntervalInput.value, 10) : 60,
   };
 }
 
@@ -339,6 +381,13 @@ function validateConfiguration(config) {
     };
   }
 
+  if (config.autoUpdate && config.updateInterval < 5) {
+    return {
+      valid: false,
+      message: 'Update interval must be at least 5 seconds.',
+    };
+  }
+
   return { valid: true };
 }
 
@@ -355,7 +404,17 @@ function saveConfiguration(config) {
       webhookId: config.webhookId,
       userName: config.user,
       deviceName: config.device,
-    }, resolve);
+      autoUpdate: config.autoUpdate,
+      updateInterval: config.updateInterval,
+    }, () => {
+      // Notify background script that settings changed
+      chrome.runtime.sendMessage({ 
+        type: 'settings-changed',
+        autoUpdate: config.autoUpdate,
+        updateInterval: config.updateInterval,
+      });
+      resolve();
+    });
   });
 }
 
