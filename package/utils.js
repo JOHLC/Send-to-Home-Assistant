@@ -250,18 +250,87 @@ function getSelectedText() {
 
 /**
  * Creates page information object for sending to webhook
- * @param {object} options - Additional options (user, device, etc.)
+ * This function must be self-contained for chrome.scripting.executeScript
+ * NOTE: Cannot use default parameters or spread operators when injecting
  * @returns {object} Page information object
  */
-function createPageInfo(options = {}) {
+function createPageInfo() {
+  // Get favicon
+  let favicon = '';
+  try {
+    const links = document.getElementsByTagName('link');
+    const formatPriority = {'png': 1, 'jpg': 2, 'jpeg': 2, 'webp': 3, 'ico': 4, 'svg': 10};
+    const candidates = [];
+    
+    for (let i = 0; i < links.length; i++) {
+      const rel = links[i].rel;
+      const href = links[i].href;
+      
+      if (rel && rel.toLowerCase().includes('icon') && href && !rel.toLowerCase().includes('apple')) {
+        if (href.startsWith('file://')) {continue;}
+        
+        let format = '';
+        const typeAttr = links[i].type;
+        if (typeAttr) {
+          const match = typeAttr.match(/image\/([a-zA-Z0-9-]+)/);
+          if (match) {format = match[1].toLowerCase();}
+        } else {
+          const urlMatch = href.match(/\.(\w+)(\?.*)?$/);
+          if (urlMatch) {format = urlMatch[1].toLowerCase();}
+        }
+        
+        if (format === 'x-icon') {format = 'ico';}
+        
+        let size = 0;
+        if (links[i].sizes && links[i].sizes.value) {
+          const sizes = links[i].sizes.value.split(' ');
+          for (const s of sizes) {
+            if (s === 'any') {continue;}
+            const parts = s.split('x');
+            if (parts.length === 2) {
+              const n = parseInt(parts[0], 10);
+              if (n > size) {size = n;}
+            }
+          }
+        }
+        
+        if (!size) {size = 16;}
+        
+        const formatScore = formatPriority[format] || 10;
+        const sizeScore = Math.max(0, 100 - size / 10);
+        const totalScore = formatScore * 1000 + sizeScore;
+        
+        candidates.push({href: href, score: totalScore});
+      }
+    }
+    
+    if (candidates.length > 0) {
+      candidates.sort(function(a, b) {return a.score - b.score;});
+      favicon = candidates[0].href;
+    } else if (location.origin && !location.protocol.startsWith('file')) {
+      favicon = location.origin + '/favicon.ico';
+    }
+  } catch (e) {
+    favicon = location.origin + '/favicon.ico';
+  }
+  
+  // Get selected text
+  let selected = '';
+  try {
+    if (window.getSelection) {
+      selected = window.getSelection().toString();
+    }
+  } catch (e) {
+    selected = '';
+  }
+  
   return {
     title: document.title,
     url: window.location.href,
-    favicon: getFavicon(),
-    selected: getSelectedText(),
+    favicon: favicon,
+    selected: selected,
     timestamp: new Date().toISOString(),
-    user_agent: navigator.userAgent,
-    ...options,
+    user_agent: navigator.userAgent
   };
 }
 
@@ -423,16 +492,36 @@ async function sendToHomeAssistant(options) {
       };
     } else {
       // Direct send scenario - get page info via scripting
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: createPageInfo,
-      });
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: createPageInfo,
+          world: 'ISOLATED', // Run in isolated world for better compatibility
+        });
 
-      if (!results || !results[0] || !results[0].result) {
-        throw new Error('Could not get page info.');
+        console.log('Script execution results:', results);
+
+        if (!results || results.length === 0) {
+          throw new Error('Script execution returned no results. Tab may not be injectable or page may not be loaded.');
+        }
+
+        const result = results[0];
+        
+        if (result.error) {
+          throw new Error('Script execution error: ' + result.error);
+        }
+
+        if (!result.result) {
+          throw new Error('Script execution returned empty result');
+        }
+
+        pageInfo = result.result;
+        console.log('Page info retrieved:', pageInfo);
+      } catch (scriptError) {
+        console.error('Script execution failed:', scriptError);
+        console.error('Tab info:', {id: tab.id, url: tab.url, status: tab.status});
+        throw new Error('Could not get page info: ' + scriptError.message);
       }
-
-      pageInfo = results[0].result;
     }
 
     // Add user and device information
