@@ -316,6 +316,40 @@ async function injectPageAlert(tabId, message) {
 const AUTO_UPDATE_ALARM_NAME = 'ha-auto-update';
 
 /**
+ * Track the last sent base URL for the active tab (in-memory only)
+ * Resets when service worker restarts
+ */
+let lastSentBaseUrl = null;
+
+/**
+ * Track the current active tab ID to detect tab switches
+ */
+let currentActiveTabId = null;
+
+/**
+ * Extract base URL from a full URL (protocol + hostname + pathname)
+ * Removes query parameters and hash fragments
+ * @param {string} url - The full URL
+ * @returns {string|null} The base URL or null if extraction fails
+ */
+function getBaseUrl(url) {
+  if (!url) {
+    return null;
+  }
+  
+  try {
+    const urlObj = new URL(url);
+    // Return protocol + hostname + pathname (no query params or hash)
+    return urlObj.origin + urlObj.pathname;
+  } catch (error) {
+    // If URL parsing fails, return null
+    // This can happen with invalid URLs or special protocols
+    console.warn('Failed to extract base URL from:', url, error);
+    return null;
+  }
+}
+
+/**
  * Setup or clear the auto-update alarm based on settings
  * @param {boolean} enabled - Whether auto-update is enabled
  * @param {number} intervalSeconds - Update interval in seconds
@@ -357,12 +391,50 @@ async function handleAutoUpdateAlarm(alarm) {
   console.log('Auto-update alarm triggered at', new Date().toISOString());
   
   try {
+    // Get the active tab first to check for changes
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!tab || !tab.id) {
+      console.log('Auto-update: No active tab found, skipping');
+      return;
+    }
+    
+    // Check for restricted pages
+    if (ExtensionUtils.isRestrictedPage(tab.url)) {
+      console.log('Auto-update: Restricted page, skipping');
+      return;
+    }
+    
+    // Extract base URL from current tab
+    const currentBaseUrl = getBaseUrl(tab.url);
+    
+    // If base URL extraction failed, fall back to sending (better to send than miss updates)
+    if (currentBaseUrl === null) {
+      console.log('Auto-update: Base URL extraction failed, sending anyway');
+    } else if (currentBaseUrl === lastSentBaseUrl && lastSentBaseUrl !== null) {
+      // Base URL hasn't changed, skip sending
+      console.log('Auto-update: Skipping webhook - base URL unchanged:', currentBaseUrl);
+      return;
+    } else {
+      // Base URL has changed or this is the first time
+      console.log('Auto-update: Sending webhook - base URL changed:', {
+        previous: lastSentBaseUrl,
+        current: currentBaseUrl,
+      });
+    }
+    
     // Send active tab without showing page alert or notifications
     // (to avoid spamming the user with notifications every interval)
     const result = await sendActiveTabToHomeAssistant({
       showPageAlert: false,
       showNotifications: false,
     });
+    
+    // Update last sent base URL only if send was successful
+    if (result.status === 'sent' && currentBaseUrl !== null) {
+      lastSentBaseUrl = currentBaseUrl;
+      currentActiveTabId = tab.id;
+    }
     
     console.log('Auto-update result:', result.status);
   } catch (error) {
@@ -386,6 +458,43 @@ async function initializeAutoUpdate() {
 
 // Listen for alarm triggers
 chrome.alarms.onAlarm.addListener(handleAutoUpdateAlarm);
+
+/**
+ * Handle tab activation (when user switches to a different tab)
+ * Reset tracking so the new tab always sends an update
+ */
+chrome.tabs.onActivated.addListener(async(activeInfo) => {
+  // Check if auto-update is enabled before resetting
+  chrome.storage.sync.get(['autoUpdate'], (data) => {
+    if (data.autoUpdate === true) {
+      // Tab switched - reset tracking so new tab sends update
+      if (currentActiveTabId !== activeInfo.tabId) {
+        console.log('Auto-update: Tab switched, resetting base URL tracking');
+        lastSentBaseUrl = null;
+        currentActiveTabId = activeInfo.tabId;
+      }
+    }
+  });
+});
+
+/**
+ * Handle tab URL updates (when user navigates within the same tab)
+ * Reset tracking so navigation triggers an update
+ */
+chrome.tabs.onUpdated.addListener(async(tabId, changeInfo, tab) => {
+  // Only process if this is the active tab and URL has changed
+  if (changeInfo.url && tab.active) {
+    // Check if auto-update is enabled before resetting
+    chrome.storage.sync.get(['autoUpdate'], (data) => {
+      if (data.autoUpdate === true) {
+        // URL changed in active tab - reset tracking so navigation sends update
+        console.log('Auto-update: URL changed in active tab, resetting base URL tracking');
+        lastSentBaseUrl = null;
+        currentActiveTabId = tabId;
+      }
+    });
+  }
+});
 
 // Initialize auto-update on startup
 initializeAutoUpdate();
