@@ -326,6 +326,20 @@ function isRestrictedPage(url) {
   }
 }
 /**
+ * Debounce repeated calls. Preserved as part of the shared utility API.
+ * @param {Function} func - Callback
+ * @param {number} wait - Delay in milliseconds
+ * @returns {Function} Debounced callback
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
+/**
  * Gets configuration from storage with defaults
  * @returns {Promise<object>} Configuration object
  */
