@@ -426,6 +426,7 @@ async function sendToWebhook(webhookUrl, data) {
  * @param {Function} [options.onError] - Error callback (error) => void
  * @param {boolean} [options.showNotifications=true] - Whether to show browser notifications
  * @param {string} [options.notificationId='send-to-ha-status'] - Notification ID
+ * @param {string} [options.profileId] - Explicit profile; omitted means configured default
  * @returns {Promise<object>} Result object with status and data
  */
 async function sendToHomeAssistant(options) {
@@ -437,6 +438,7 @@ async function sendToHomeAssistant(options) {
     onError,
     showNotifications = true,
     notificationId = 'send-to-ha-status',
+    profileId,
   } = options;
 
   // Validate inputs
@@ -477,6 +479,10 @@ async function sendToHomeAssistant(options) {
     if (!allowed) {
       throw new Error('Home Assistant site access is missing. Open extension settings and save again to grant access.');
     }
+
+    // Resolve the profile at send time. Deleted or invalid selections fail closed.
+    const profileSettings = await ExtensionProfiles.getProfileSettings();
+    const profile = ExtensionProfiles.resolveProfile(profileSettings, profileId);
 
     // Show progress
     if (onProgress) {onProgress('Sending to Home Assistant...');}
@@ -534,6 +540,9 @@ async function sendToHomeAssistant(options) {
     if (config.deviceName) {
       pageInfo.device = config.deviceName;
     }
+
+    // Context routing is controlled by the extension, never by page content.
+    pageInfo.context = profile.context;
 
     // Send to webhook
     await sendToWebhook(webhookUrl, pageInfo);
