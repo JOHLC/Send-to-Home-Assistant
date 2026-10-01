@@ -27,11 +27,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const msgDiv = document.getElementById('popupMsg');
 const okBtn = document.getElementById('okBtn');
+const profileSelect = document.getElementById('profileSelect');
+const sendBtn = document.getElementById('sendBtn');
+let sending = false;
 
 /**
  * Main function to send page data to Home Assistant
  */
 async function sendToHA() {
+  if (sending) {
+    return;
+  }
+  sending = true;
+  sendBtn.disabled = true;
+  profileSelect.disabled = true;
   updateStatus('Sending...');
   hideButton();
 
@@ -44,6 +53,7 @@ async function sendToHA() {
     // Use unified sendToHomeAssistant function with popup-specific callbacks
     await ExtensionUtils.sendToHomeAssistant({
       tab,
+      profileId: profileSelect.value,
       onProgress: (message) => {
         updateStatus(message);
       },
@@ -66,6 +76,10 @@ async function sendToHA() {
     console.error('Send to HA failed:', error);
     handleError(error);
     showButton();
+  } finally {
+    sending = false;
+    sendBtn.disabled = false;
+    profileSelect.disabled = false;
   }
 }
 
@@ -245,8 +259,30 @@ function handleError(error) {
 
 // --- Event Listeners ---
 
-// Initialize popup when page loads
-sendToHA();
+// Load the configured default. Explicit Send prevents an unintended first send
+// when the user wants to choose an alternative context.
+async function initializePopup() {
+  try {
+    const settings = await ExtensionProfiles.getProfileSettings();
+    profileSelect.replaceChildren();
+    for (const profile of ExtensionProfiles.listProfiles(settings)) {
+      const option = document.createElement('option');
+      option.value = profile.id;
+      option.textContent = profile.name + (profile.id === settings.defaultProfileId ? ' (default)' : '');
+      profileSelect.appendChild(option);
+    }
+    profileSelect.value = settings.defaultProfileId;
+    if (settings.quickSendDefault) {
+      await sendToHA();
+    }
+  } catch (error) {
+    handleError(error);
+    sendBtn.disabled = true;
+  }
+}
+
+sendBtn.addEventListener('click', sendToHA);
+initializePopup().catch(handleError);
 
 // OK button closes the popup
 okBtn.addEventListener('click', () => {
