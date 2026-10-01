@@ -9,64 +9,59 @@
  */
 
 // Import utilities
-importScripts('utils.js');
+importScripts('profiles.js', 'utils.js');
 
-// --- Context Menu Integration ---
+// --- Profile-aware context menu integration ---
+const MENU_PREFIX = 'send-to-ha-profile:';
+let menuRefresh = Promise.resolve();
 
-/**
- * Initialize context menus when extension is installed or updated
- */
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    // Parent menu
-    chrome.contextMenus.create({
+function queueContextMenuRefresh() {
+  // Serialize rebuilds so a storage update cannot race an install/startup refresh.
+  menuRefresh = menuRefresh.catch(() => {}).then(async() => {
+    const settings = await ExtensionProfiles.getProfileSettings();
+    await new Promise((resolve, reject) => chrome.contextMenus.removeAll(() =>
+      chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
+    const create = (config) => new Promise((resolve, reject) => chrome.contextMenus.create(config, () =>
+      chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
+    await create({
       id: 'send-to-ha-parent',
       title: 'Send to Home Assistant',
       contexts: ['page', 'selection', 'link'],
     });
-    // Default sub-option
-    chrome.contextMenus.create({
-      id: 'send-to-ha-default',
-      parentId: 'send-to-ha-parent',
-      title: 'Default',
-      contexts: ['page', 'selection', 'link'],
-    });
-    // Future sub-options can be added here
+    for (const profile of ExtensionProfiles.listProfiles(settings)) {
+      const isDefault = profile.id === settings.defaultProfileId;
+      await create({
+        id: MENU_PREFIX + profile.id,
+        parentId: 'send-to-ha-parent',
+        title: profile.name + (isDefault ? ' (default)' : ''),
+        contexts: ['page', 'selection', 'link'],
+      });
+    }
   });
-});
+  menuRefresh.catch((error) => console.error('Could not update send profile menus:', error));
+}
 
-/**
- * Handle context menu clicks
- */
+chrome.runtime.onInstalled.addListener(queueContextMenuRefresh);
+chrome.runtime.onStartup.addListener(queueContextMenuRefresh);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && (changes.sendProfiles || changes.defaultProfileId)) {
+    queueContextMenuRefresh();
+  }
+});
+// A service worker can restart independently of installation or browser startup.
+queueContextMenuRefresh();
+
 chrome.contextMenus.onClicked.addListener(async(info, tab) => {
-  if (!tab || !tab.id) {
+  if (!tab || typeof tab.id !== 'number' || typeof info.menuItemId !== 'string' ||
+      !info.menuItemId.startsWith(MENU_PREFIX)) {
     return;
   }
-
-  // Check for restricted pages first
-  if (ExtensionUtils.isRestrictedPage(tab.url)) {
-    const errorMessage = 'This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.';
-    ExtensionUtils.createNotification(errorMessage, 'send-to-ha-status', 'icon-256.png');
-    return;
-  }
-
-  if (info.menuItemId === 'send-to-ha-default') {
-    await handleContextMenuSend(info, tab);
-  }
-  // Future sub-options can be handled here
-});
-
-/**
- * Handle sending from context menu
- * @param {object} info - Context menu info
- * @param {object} tab - Tab information
- */
-async function handleContextMenuSend(info, tab) {
   await ExtensionUtils.sendToHomeAssistant({
     tab,
     contextInfo: info,
+    profileId: info.menuItemId.slice(MENU_PREFIX.length),
   });
-}
+});
 
 // --- Extension update check (GitHub releases) ---
 
