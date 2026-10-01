@@ -124,23 +124,16 @@ function displayUpdateStatus(updateDiv) {
  * Load saved configuration from storage
  */
 function loadSavedConfiguration() {
-  chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
-    if (result.haHost) {
-      hostInput.value = result.haHost;
+  ExtensionUtils.getStorageConfig().then((result) => {
+    hostInput.value = result.haHost || '';
+    sslToggle.checked = result.ssl;
+    webhookIdInput.value = result.webhookId || '';
+    userInput.value = result.userName || '';
+    if (deviceInput) {
+      deviceInput.value = result.deviceName || '';
     }
-    if (typeof result.ssl === 'boolean') {
-      sslToggle.checked = result.ssl;
-    }
-    if (result.webhookId) {
-      webhookIdInput.value = result.webhookId;
-    }
-    if (result.userName) {
-      userInput.value = result.userName;
-    }
-    if (result.deviceName && deviceInput) {
-      deviceInput.value = result.deviceName;
-    }
-  });
+    updateSslWarning();
+  }).catch((error) => showStatus(error.message, 'error'));
 }
 
 /**
@@ -167,67 +160,69 @@ function setupEventListeners() {
 /**
  * Handle save button click
  */
-function handleSave() {
+async function handleSave() {
   const config = getFormConfiguration();
-  
-  // Validate configuration
   const validation = validateConfiguration(config);
   if (!validation.valid) {
     showStatus(validation.message, 'error');
     return;
   }
-
-  // Show validating status
-  showStatus('Validating webhook...', '');
-
-  // Test webhook accessibility before saving
-  testWebhookAccessibility(config)
-    .then(() => {
-      // Save configuration
-      return saveConfiguration(config);
-    })
-    .then(() => {
-      showStatus('Saved!', 'success');
-      setTimeout(clearStatus, 2000);
-    })
-    .catch((error) => {
-      console.error('Save failed:', error);
-      showStatus(escapeHTML(error.message), 'error');
-    });
+  saveBtn.disabled = true;
+  try {
+    // Request permission directly from the Save click's user gesture.
+    await requestWebhookPermission(config);
+    await saveConfiguration(config);
+    showStatus('Saved. Use Test to verify your Home Assistant automation fires.', 'success');
+    setTimeout(clearStatus, 3500);
+  } catch (error) {
+    showStatus(error.message, 'error');
+  } finally {
+    saveBtn.disabled = false;
+  }
 }
 
 /**
  * Handle test button click
  */
-function handleTest() {
+async function handleTest() {
   const config = getFormConfiguration();
-  
-  // Validate configuration
   const validation = validateConfiguration(config);
   if (!validation.valid) {
     showStatus(validation.message, 'error');
     return;
   }
-
-  showStatus('Testing...', '');
-
-  // Perform test
-  performWebhookTest(config)
-    .then(() => {
-      showStatus('Test sent! (Check Home Assistant logs to confirm the webhook was triggered. Home Assistant always returns 200 even for invalid webhooks.)', 'success');
-    })
-    .catch((error) => {
-      console.error('Test failed:', error);
-      showStatus(escapeHTML(error.message), 'error');
-    });
+  testBtn.disabled = true;
+  try {
+    await requestWebhookPermission(config);
+    showStatus('Sending test payload...', '');
+    await performWebhookTest(config);
+    showStatus('POST accepted. Confirm the automation triggered in Home Assistant; HTTP success alone is insufficient.', 'success');
+  } catch (error) {
+    showStatus(error.message, 'error');
+  } finally {
+    testBtn.disabled = false;
+  }
 }
 
 /**
  * Handle clear config button click
  */
-function handleClearConfig() {
-  chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], () => {
-    // Clear form fields
+async function handleClearConfig() {
+  try {
+    const old = await ExtensionUtils.getStorageConfig();
+    await Promise.all([
+      new Promise((resolve, reject) => chrome.storage.sync.remove(
+        ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'],
+        () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
+      )),
+      new Promise((resolve, reject) => chrome.storage.local.remove('webhookId',
+        () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
+      )),
+    ]);
+    if (old.haHost && old.webhookId) {
+      const endpoint = new URL(ExtensionUtils.createWebhookUrl(old.haHost, old.ssl, old.webhookId));
+      await chrome.permissions.remove({ origins: [endpoint.protocol + '//' + endpoint.hostname + '/*'] });
+    }
     hostInput.value = '';
     sslToggle.checked = true;
     webhookIdInput.value = '';
@@ -235,10 +230,11 @@ function handleClearConfig() {
     if (deviceInput) {
       deviceInput.value = '';
     }
-    
-    showStatus('Config cleared!', 'success');
-    setTimeout(clearStatus, 2000);
-  });
+    updateSslWarning();
+    showStatus('Settings cleared and webhook site access removed.', 'success');
+  } catch (error) {
+    showStatus('Could not clear all settings: ' + error.message, 'error');
+  }
 }
 
 // --- SSL Warning Management ---
@@ -311,34 +307,17 @@ function getFormConfiguration() {
  * @returns {object} Validation result
  */
 function validateConfiguration(config) {
-  if (!config.host) {
-    return {
-      valid: false,
-      message: 'Please enter your Home Assistant hostname or IP.',
-    };
+  try {
+    ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId);
+  } catch (error) {
+    return { valid: false, message: error.message };
   }
-
-  if (!config.webhookId) {
-    return {
-      valid: false,
-      message: 'Please enter your Home Assistant webhook ID.',
-    };
+  if (config.device && !ExtensionUtils.validateDeviceName(config.device)) {
+    return { valid: false, message: 'Device name must contain up to 32 letters, numbers, spaces, dashes or underscores.' };
   }
-
-  if (config.device && !/^[\w\s-]{1,32}$/.test(config.device)) {
-    return {
-      valid: false,
-      message: 'Device name can only contain letters, numbers, spaces, dashes, and underscores (max 32 chars).',
-    };
+  if (!ExtensionUtils.validateUserName(config.user)) {
+    return { valid: false, message: 'User name must not exceed 32 characters.' };
   }
-
-  if (config.user && config.user.length > 32) {
-    return {
-      valid: false,
-      message: 'User name cannot exceed 32 characters.',
-    };
-  }
-
   return { valid: true };
 }
 
@@ -347,16 +326,14 @@ function validateConfiguration(config) {
  * @param {object} config - Configuration to save
  * @returns {Promise} Storage save promise
  */
-function saveConfiguration(config) {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set({
-      haHost: config.host,
-      ssl: config.ssl,
-      webhookId: config.webhookId,
-      userName: config.user,
-      deviceName: config.device,
-    }, resolve);
-  });
+async function saveConfiguration(config) {
+  const syncData = { haHost: config.host, ssl: config.ssl, userName: config.user, deviceName: config.device };
+  await new Promise((resolve, reject) => chrome.storage.local.set({ webhookId: config.webhookId },
+    () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
+  await new Promise((resolve, reject) => chrome.storage.sync.set(syncData,
+    () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
+  await new Promise((resolve, reject) => chrome.storage.sync.remove('webhookId',
+    () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
 }
 
 // --- Webhook Testing ---
@@ -366,35 +343,13 @@ function saveConfiguration(config) {
  * @param {object} config - Configuration object
  * @returns {Promise} Test result promise
  */
-function testWebhookAccessibility(config) {
-  const url = `${config.ssl ? 'https' : 'http'}://${config.host}/api/webhook/${config.webhookId}`;
-  
-  return fetch(url, { method: 'HEAD', mode: 'cors' })
-    .then((response) => {
-      if (!response.ok) {
-        let message = `Webhook not reachable: HTTP ${response.status}`;
-        
-        if (response.status === 404) {
-          message += ' (Webhook not found. Check your ID and host.)';
-        } else if (response.status === 401 || response.status === 403) {
-          message += ' (Unauthorized. Check your Home Assistant token or permissions.)';
-        }
-        
-        throw new Error(message);
-      }
-      return response;
-    })
-    .catch((error) => {
-      if (error.message.includes('HTTP')) {
-        throw error; // Re-throw HTTP errors as-is
-      }
-      
-      let message = 'Could not reach the webhook URL. Please check your network or URL.';
-      if (error.message) {
-        message += ` (${escapeHTML(error.message)})`;
-      }
-      throw new Error(message);
-    });
+async function requestWebhookPermission(config) {
+  const endpoint = new URL(ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId));
+  const origin = endpoint.protocol + '//' + endpoint.hostname + '/*';
+  const granted = await chrome.permissions.request({ origins: [origin] });
+  if (!granted) {
+    throw new Error('Site access declined. Grant access to your Home Assistant host to send data.');
+  }
 }
 
 /**
@@ -402,45 +357,9 @@ function testWebhookAccessibility(config) {
  * @param {object} config - Configuration object
  * @returns {Promise} Test result promise
  */
-function performWebhookTest(config) {
-  const url = `${config.ssl ? 'https' : 'http'}://${config.host}/api/webhook/${config.webhookId}`;
-  
-  const payload = createTestPayload(config);
-  
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-    .then((response) => {
-      if (!response.ok) {
-        return response.text().then((text) => {
-          let message = `Test failed: HTTP ${response.status}`;
-        
-          if (text) {
-            message += `: ${escapeHTML(text)}`;
-          } else if (response.status === 404) {
-            message += ' (Webhook not found. Check your ID and host.)';
-          } else if (response.status === 401 || response.status === 403) {
-            message += ' (Unauthorized. Check your Home Assistant token or permissions.)';
-          }
-        
-          throw new Error(message);
-        });
-      }
-      return response;
-    })
-    .catch((error) => {
-      if (error.message.includes('HTTP')) {
-        throw error; // Re-throw HTTP errors as-is
-      }
-    
-      let message = 'Test failed: Could not reach the webhook URL. Please check your network or URL.';
-      if (error.message) {
-        message += ` (${escapeHTML(error.message)})`;
-      }
-      throw new Error(message);
-    });
+async function performWebhookTest(config) {
+  const url = ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId);
+  return ExtensionUtils.sendToWebhook(url, createTestPayload(config));
 }
 
 /**
@@ -451,7 +370,7 @@ function performWebhookTest(config) {
 function createTestPayload(config) {
   const payload = {
     title: 'Test from extension',
-    url: window.location.origin,
+    url: 'https://example.com/',
     favicon: 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon-256.png',
     selected: 'Sample selected text',
     timestamp: new Date().toISOString(),
