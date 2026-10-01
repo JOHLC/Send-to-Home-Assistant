@@ -171,15 +171,37 @@ async function handleSave() {
     showStatus(validation.message, 'error');
     return;
   }
+
   saveBtn.disabled = true;
+  let requestedOrigin = null;
+  let previousOrigin = null;
+  let saved = false;
   try {
-    // Request permission directly from the Save click's user gesture.
-    await requestWebhookPermission(config);
+    // Chrome requires permissions.request to run from the Save click's user gesture.
+    requestedOrigin = await requestWebhookPermission(config);
+    const previous = await ExtensionUtils.getStorageConfig();
+    previousOrigin = configuredWebhookOrigin(previous);
+
     await saveConfiguration(config);
+    saved = true;
+    // Remove all stale optional host grants, including ones left by older builds.
+    await revokeUnusedWebhookPermissions(requestedOrigin);
     showStatus('Saved. Use Test to verify your Home Assistant automation fires.', 'success');
     setTimeout(clearStatus, 3500);
   } catch (error) {
-    showStatus(error.message, 'error');
+    if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
+      try {
+        // Never leave a newly requested grant behind after a failed save.
+        await revokeUnusedWebhookPermissions(previousOrigin);
+      } catch (cleanupError) {
+        showStatus('Save failed: ' + error.message + '. Could not revoke temporary access: ' +
+          cleanupError.message, 'error');
+        saveBtn.disabled = false;
+        return;
+      }
+    }
+    showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
+      'Save failed: ' + error.message, 'error');
   } finally {
     saveBtn.disabled = false;
   }
@@ -195,15 +217,31 @@ async function handleTest() {
     showStatus(validation.message, 'error');
     return;
   }
+
   testBtn.disabled = true;
+  let requestedOrigin = null;
+  let savedOrigin = null;
   try {
-    await requestWebhookPermission(config);
+    // Request immediately in the click handler to preserve user activation.
+    requestedOrigin = await requestWebhookPermission(config);
+    const previous = await ExtensionUtils.getStorageConfig();
+    savedOrigin = configuredWebhookOrigin(previous);
+
     showStatus('Sending test payload...', '');
     await performWebhookTest(config);
-    showStatus('POST accepted. Confirm the automation triggered in Home Assistant; HTTP success alone is insufficient.', 'success');
+    showStatus('POST accepted. Confirm the automation triggered in Home Assistant; HTTP success alone is insufficient.',
+      'success');
   } catch (error) {
-    showStatus(error.message, 'error');
+    showStatus('Test failed: ' + error.message, 'error');
   } finally {
+    if (requestedOrigin) {
+      try {
+        // A test with unsaved settings must not retain its temporary site grant.
+        await revokeUnusedWebhookPermissions(savedOrigin);
+      } catch (error) {
+        showStatus('Test finished, but temporary site access could not be removed: ' + error.message, 'error');
+      }
+    }
     testBtn.disabled = false;
   }
 }
@@ -212,8 +250,8 @@ async function handleTest() {
  * Handle clear config button click
  */
 async function handleClearConfig() {
+  clearBtn.disabled = true;
   try {
-    const old = await ExtensionUtils.getStorageConfig();
     await Promise.all([
       new Promise((resolve, reject) => chrome.storage.sync.remove(
         ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'sendProfiles', 'defaultProfileId', 'quickSendDefault'],
@@ -223,10 +261,8 @@ async function handleClearConfig() {
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
     ]);
-    if (old.haHost && old.webhookId) {
-      const endpoint = new URL(ExtensionUtils.createWebhookUrl(old.haHost, old.ssl, old.webhookId));
-      await chrome.permissions.remove({ origins: [endpoint.protocol + '//' + endpoint.hostname + '/*'] });
-    }
+    // Also clean old grants that are not associated with the currently saved host.
+    await revokeUnusedWebhookPermissions(null);
     hostInput.value = '';
     sslToggle.checked = true;
     webhookIdInput.value = '';
@@ -237,7 +273,9 @@ async function handleClearConfig() {
     updateSslWarning();
     showStatus('Settings cleared and webhook site access removed.', 'success');
   } catch (error) {
-    showStatus('Could not clear all settings: ' + error.message, 'error');
+    showStatus('Could not clear all settings or site access: ' + error.message, 'error');
+  } finally {
+    clearBtn.disabled = false;
   }
 }
 
@@ -339,13 +377,45 @@ async function saveConfiguration(config) {
  * @param {object} config - Configuration object
  * @returns {Promise} Test result promise
  */
+function configuredWebhookOrigin(config) {
+  if (!config || !config.haHost) {
+    return null;
+  }
+  try {
+    const endpoint = new URL(ExtensionUtils.createWebhookUrl(
+      config.haHost, config.ssl, config.webhookId || 'placeholder'));
+    return endpoint.protocol + '//' + endpoint.hostname + '/*';
+  } catch (_) {
+    return null;
+  }
+}
+
+async function revokeUnusedWebhookPermissions(keepOrigin) {
+  const granted = await chrome.permissions.getAll();
+  const required = new Set(chrome.runtime.getManifest().host_permissions || []);
+  const stale = (granted.origins || []).filter((origin) =>
+    (origin === '<all_urls>' || origin.startsWith('https://') || origin.startsWith('http://')) &&
+    !required.has(origin) && origin !== keepOrigin);
+  if (stale.length) {
+    const removed = await chrome.permissions.remove({ origins: stale });
+    if (!removed) {
+      throw new Error('The browser declined to remove obsolete host permissions.');
+    }
+  }
+}
+
 async function requestWebhookPermission(config) {
-  const endpoint = new URL(ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId));
-  const origin = endpoint.protocol + '//' + endpoint.hostname + '/*';
+  const origin = configuredWebhookOrigin({
+    haHost: config.host, ssl: config.ssl, webhookId: config.webhookId,
+  });
+  if (!origin) {
+    throw new Error('Invalid Home Assistant host.');
+  }
   const granted = await chrome.permissions.request({ origins: [origin] });
   if (!granted) {
     throw new Error('Site access declined. Grant access to your Home Assistant host to send data.');
   }
+  return origin;
 }
 
 /**
