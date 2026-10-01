@@ -214,7 +214,7 @@ test('profile validation prevents duplicate contexts, IDs and markup-bearing con
   const { profiles } = harness();
   const first = { id: 'p_12345678', name: 'YTDL', context: 'YTDL' };
   const other = { id: 'p_87654321', name: 'Save', context: 'Save' };
-  assert.deepEqual(profiles.validateProfiles([first, other]).map((p) => p.context), ['YTDL', 'Save']);
+  assert.deepEqual([...profiles.validateProfiles([first, other])].map((p) => p.context), ['YTDL', 'Save']);
   assert.throws(() => profiles.validateProfiles([first, { ...other, context: 'ytdl' }]), /unique/);
   assert.throws(() => profiles.validateProfiles([first, { ...other, name: 'ytdl' }]), /unique/);
   assert.throws(() => profiles.validateProfiles([first, { ...other, id: first.id }]), /unique/);
