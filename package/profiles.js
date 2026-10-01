@@ -21,7 +21,8 @@
       }
       const name = typeof profile.name === 'string' ? profile.name.trim() : '';
       const context = typeof profile.context === 'string' ? profile.context.trim() : '';
-      if (!name || name.length > 40 || [...name].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+      if (!name || name.length > 40 ||
+          [...name].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
         throw new Error('Profile names must be 1-40 printable characters.');
       }
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(context)) {
