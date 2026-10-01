@@ -14,7 +14,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(source, 'manifest.json'), 
 const files = [
   'manifest.json', 'background.js', 'popup.html', 'popup.js',
   'options.html', 'options.js', 'utils.js', 'inpage-alert.js',
-  'style.css', 'icon-256.png',
+  'style.css', 'icon-256.png', 'profiles.js', 'profile-options.js',
 ];
 
 function createPackage() {
