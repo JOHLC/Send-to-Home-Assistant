@@ -52,29 +52,27 @@ function escapeHTML(str) {
  * @returns {string} The complete webhook URL
  */
 function createWebhookUrl(host, ssl, webhookId) {
-  if (typeof host !== 'string' || !host.trim() || typeof webhookId !== 'string' ||
+  if (typeof host !== 'string' || typeof webhookId !== 'string' ||
       !/^[A-Za-z0-9_.~-]{1,256}$/.test(webhookId)) {
     throw new Error('Enter a hostname and a valid webhook ID (letters, numbers, underscores or hyphens).');
   }
-  if (/[\\/?#@\\s]/.test(host) && !/^\\[[0-9a-fA-F:]+\\](?::\\d+)?$/.test(host)) {
-    // A bare hostname, optional port or bracketed IPv6 address is expected.
-    if (!/^[A-Za-z0-9.-]+(?::\\d+)?$/.test(host)) {
-      throw new Error('Enter only a hostname or IP address, with an optional port.');
-    }
+  const hostname = host.trim();
+  if (!/^(?:[A-Za-z0-9.-]+|\[[0-9a-fA-F:]+\])(?::[0-9]{1,5})?$/.test(hostname)) {
+    throw new Error('Enter only a hostname or IP address, with an optional port.');
   }
   let url;
   try {
-    url = new URL((ssl ? 'https://' : 'http://') + host.trim());
+    url = new URL((ssl ? 'https://' : 'http://') + hostname);
   } catch (_) {
     throw new Error('Invalid Home Assistant hostname or port.');
   }
-  if (!['http:', 'https:'].includes(url.protocol) || !url.hostname ||
-      url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('Enter only a hostname or IP address, with an optional port.');
+  if (!url.hostname || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('Invalid Home Assistant hostname or port.');
   }
   url.pathname = '/api/webhook/' + encodeURIComponent(webhookId);
   return url.href;
 }
+
 /**
  * Validates device name format
  * @param {string} deviceName - The device name to validate
@@ -279,17 +277,18 @@ function createPageInfo() {
       try {
         const url = new URL(link.getAttribute('href'), document.baseURI);
         const type = (link.getAttribute('type') || '').toLowerCase();
-        const match = url.pathname.match(/\\.([a-z0-9]+)$/i);
+        const extension = url.pathname.slice(url.pathname.lastIndexOf('.') + 1).toLowerCase();
         const format = type.includes('png') ? 'png' :
           type.includes('jpeg') ? 'jpeg' :
             type.includes('webp') ? 'webp' :
-              type.includes('icon') ? 'ico' : (match ? match[1].toLowerCase() : '');
+              type.includes('icon') ? 'ico' : extension;
         return { url: url.href, rank: priority[format] || 99 };
       } catch (_) {
         return { url: '', rank: 99 };
       }
     })
-    .filter((candidate) => /^https?:\\/\\//.test(candidate.url) && candidate.rank < 99)
+    .filter((candidate) => (candidate.url.startsWith('https://') || candidate.url.startsWith('http://')) &&
+      candidate.rank < 99)
     .sort((a, b) => a.rank - b.rank);
   const defaultIcon = /^https?:$/.test(location.protocol) ?
     new URL('/favicon.ico', location.origin).href : fallback;
