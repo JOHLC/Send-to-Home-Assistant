@@ -52,7 +52,9 @@ This all started because I wanted to be able to send the current web page from m
 - **Easy configuration:** Options page for Home Assistant host, SSL, webhook ID, username, and device name.
 - **Webhook test:** Built-in from the options page.
 - **Error handling:** Friendly user feedback.
-- **Sync storage:** All settings are stored securely.
+- **Scoped permissions:** Grants access only to the Home Assistant host you select; manual page collection uses the browser's active-tab grant.
+- **Local webhook secret:** Webhook ID stays in local extension storage; non-secret preferences may sync.
+- **Automated checks:** Node tests, manifest validation, linting and ZIP packaging run in CI.
 
 ---
 
@@ -90,7 +92,11 @@ This all started because I wanted to be able to send the current web page from m
 3. Choose whether to use SSL (**strongly recommended**; you'll be warned if not enabled).
 4. Enter your Home Assistant [Webhook ID](https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger) (just the ID, not the full URL).
 5. Optionally, add a username and device name to include in the payload.
-6. Click **Test** to confirm the webhook is reachable, then **Save** your settings.
+6. Click **Save** and approve access to your specific Home Assistant host. Then click **Test** to send a sample POST request. Confirm that the automation actually triggered in Home Assistant; an HTTP success alone does not verify it.
+
+**Updating from a previous version:** Open Options and click Save once to grant the new scoped host permission. An existing synced webhook ID is migrated to local storage. On another browser or computer, you may need to enter the ID again after migration.
+
+**Local files:** Enable file URL access in the browser's extension details if you want page extraction from local files. If injection is unavailable, manual sending falls back to the browser tab's URL and title.
 
 ---
 
@@ -117,7 +123,7 @@ This extension collects the following data when you use it:
 | User agent      | Sent to your webhook |
 | Username/device | Only if provided in options |
 
-**All data is sent only to your configured Home Assistant webhook and is never sent to any third party or external server. No data is collected or stored by the extension author.**
+**Page data** is posted to your configured Home Assistant webhook when you manually send it. Update checks are disabled by default; enabling them makes daily requests to GitHub's releases API. An HTTPS fallback favicon hosted on GitHub may be fetched when your Home Assistant notification displays it. The extension author does not operate a collection endpoint. Treat the webhook ID like a secret and use HTTPS on untrusted networks.
 
 ---
 
