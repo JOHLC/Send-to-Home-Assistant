@@ -63,12 +63,14 @@ function initializeUpdateChecking() {
   chrome.storage.local.get('updateCheckEnabled', (data) => {
     updateCheckToggle.checked = typeof data.updateCheckEnabled === 'boolean' 
       ? data.updateCheckEnabled 
-      : true; // default to enabled
+      : false; // opt-in
   });
 
   // Handle toggle changes
   updateCheckToggle.addEventListener('change', () => {
-    chrome.storage.local.set({ updateCheckEnabled: updateCheckToggle.checked });
+    chrome.storage.local.set({ updateCheckEnabled: updateCheckToggle.checked }, () => {
+      chrome.runtime.sendMessage({ type: 'update-preference-changed' }).catch(console.warn);
+    });
     
     // Show/hide update status based on toggle
     if (updateDiv) {
@@ -85,39 +87,41 @@ function initializeUpdateChecking() {
  * @param {HTMLElement} updateDiv - Update status container element
  */
 function displayUpdateStatus(updateDiv) {
-  if (!updateDiv || !chrome.storage || !chrome.storage.local) {
+  if (!updateDiv || !chrome.storage?.local) {
     return;
   }
-
   chrome.storage.local.get(['updateInfo', 'updateCheckEnabled'], (data) => {
     const info = data.updateInfo;
-    const enabled = typeof data.updateCheckEnabled === 'boolean' 
-      ? data.updateCheckEnabled 
-      : true;
-
-    // Hide if disabled
-    if (!enabled) {
-      updateDiv.classList.add('hidden');
+    const enabled = data.updateCheckEnabled === true;
+    updateDiv.classList.toggle('hidden', !enabled);
+    updateDiv.replaceChildren();
+    if (!enabled || !info) {
       return;
     }
-
-    updateDiv.classList.remove('hidden');
-
-    // Show update information
-    if (info && info.isNewer && info.latest && info.html_url) {
-      updateDiv.innerHTML = `
-        <div class="update-available">
-          New version available: 
-          <a href="${escapeHTML(info.html_url)}" target="_blank" rel="noopener noreferrer" class="link-blue">
-            v${escapeHTML(info.latest)}
-          </a>
-        </div>
-      `;
-    } else if (info && !info.isNewer) {
-      updateDiv.innerHTML = '<div class="update-latest">You are using the latest version.</div>';
-    } else {
-      updateDiv.innerHTML = '';
+    const message = document.createElement('div');
+    if (info.isNewer && info.latest && info.html_url) {
+      try {
+        const url = new URL(info.html_url);
+        if (url.protocol !== 'https:' || url.hostname !== 'github.com' ||
+            !url.pathname.startsWith('/JOHLC/Send-to-Home-Assistant/releases/')) {
+          throw new Error('Unexpected release URL');
+        }
+        const link = document.createElement('a');
+        link.href = url.href;
+        link.textContent = 'v' + info.latest;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'link-blue';
+        message.className = 'update-available';
+        message.append('New version available: ', link);
+      } catch (_) {
+        message.textContent = 'Update available. Visit the project releases page.';
+      }
+    } else if (!info.isNewer) {
+      message.className = 'update-latest';
+      message.textContent = 'You are using the latest published release.';
     }
+    updateDiv.appendChild(message);
   });
 }
 /**
@@ -264,15 +268,7 @@ function updateSslWarning() {
 function createSslWarningElement() {
   const warn = document.createElement('div');
   warn.id = 'sslWarn';
-  warn.style.cssText = `
-    color: #ffb347;
-    background: rgba(255,180,71,0.08);
-    border: 1px solid #ffb347;
-    border-radius: 8px;
-    padding: 0.7em 1em;
-    margin: 0.7em 0 1em 0;
-    font-size: 1em;
-  `;
+  warn.className = 'ssl-warning';
   
   warn.innerHTML = `
     <b>Warning:</b> You are not using SSL (https).<br>This is not secure!<br>
@@ -339,7 +335,7 @@ async function saveConfiguration(config) {
 // --- Webhook Testing ---
 
 /**
- * Test webhook accessibility (HEAD request)
+ * Request site access for the configured Home Assistant origin
  * @param {object} config - Configuration object
  * @returns {Promise} Test result promise
  */
@@ -407,16 +403,3 @@ function clearStatus() {
   statusDiv.className = 'status';
 }
 
-/**
- * Escape HTML to prevent XSS
- * @param {string} str - String to escape
- * @returns {string} Escaped string
- */
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
