@@ -33,6 +33,30 @@
   <button id="clearConfig" class="copy-btn clear-btn">Clear Config</button>
     </div>
 
+  <section class="profiles-panel" aria-labelledby="profilesHeading">
+    <h3 id="profilesHeading">Send profiles</h3>
+    <p>All profiles use your configured webhook. The context field selects an action in your Home Assistant automation.</p>
+    <label for="defaultProfile">Default send profile</label>
+    <select id="defaultProfile" class="profile-select">
+      <option value="default">Default</option>
+    </select>
+    <label class="profile-checkbox" for="quickSendDefault">
+      <input type="checkbox" id="quickSendDefault">
+      Automatically send the default when the popup opens
+    </label>
+    <p class="profile-hint">Leave this off to select a different profile before sending. Right-click profiles always send directly.</p>
+    <div id="profilesList" class="profiles-list" aria-label="Custom profiles"></div>
+    <form id="profileAddForm" class="profile-add-form">
+      <h4>Add a profile</h4>
+      <label for="newProfileName">Display name</label>
+      <input type="text" id="newProfileName" maxlength="40" required placeholder="e.g. Download video">
+      <label for="newProfileContext">Context sent to Home Assistant</label>
+      <input type="text" id="newProfileContext" maxlength="64" required
+        pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="e.g. YTDL" spellcheck="false">
+      <button class="copy-btn" type="submit">Add profile</button>
+    </form>
+    <div class="status" id="profileStatus" role="status" aria-live="polite"></div>
+  </section>
   <div class="status" id="status" role="status" aria-live="polite"></div>
   
     <div class="privacy">
@@ -53,8 +77,10 @@
       <div id="extVersion" class="ext-version"></div>
     </div>
   </div>
+  <script src="profiles.js"></script>
   <script src="utils.js"></script>
   <script src="options.js"></script>
+  <script src="profile-options.js"></script>
 </body>
 </html>
 
