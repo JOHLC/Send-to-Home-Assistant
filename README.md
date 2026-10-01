@@ -44,7 +44,8 @@ This all started because I wanted to be able to send the current web page from m
 
 ## Features
 
-- **One click:** Send the current tab’s details to Home Assistant.
+- **Multiple send profiles:** Add custom names and context values (for example, YTDL or Save), choose a default, and override it for individual sends.
+- **Quick send (optional):** Enable automatic sending of your default profile when the popup opens. It is off by default so you can choose another profile first.
 - **Clean popup UI:** See status updates, payload preview, and copy-as-JSON.
 - **Sends basic info:** URL, title, selected text, username, and more.
 - **Works everywhere:** Popup works on any website (except internal pages like `chrome://` or `edge://`).
@@ -96,14 +97,51 @@ This all started because I wanted to be able to send the current web page from m
 
 **Updating from a previous version:** Open Options and click Save once to grant the new scoped host permission. An existing synced webhook ID is migrated to local storage. On another browser or computer, you may need to enter the ID again after migration.
 
+### Profiles and Home Assistant routing
+
+All profiles use the **same configured webhook**. Each send includes a case-sensitive `context` field, such as `Default`, `YTDL`, or `Save`. The built-in Default profile always exists, and existing HA automations that check `trigger.json.context == 'YTDL'` continue working once you add a profile with that exact context.
+
+Create or edit profiles in **Options > Send profiles**, then choose the default profile. You can edit or delete custom profiles, but you cannot delete the built-in Default. Deleting the configured default falls back to Default. Profile names and contexts are stored in browser sync; your webhook ID remains local.
+
+Example payload (other fields omitted):
+
+```json
+{
+  "title": "Example page",
+  "url": "https://example.com/",
+  "context": "YTDL"
+}
+```
+
+Example Home Assistant routing:
+
+```yaml
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.json.context | default('Default') == 'YTDL' }}"
+        sequence:
+          - action: script.home_assistant_fire_event
+            data:
+              event_type: send-to-ha
+              customdata: "[{{ trigger.json }}]"
+    default:
+      - action: persistent_notification.create
+        data:
+          title: "Shared from Browser: {{ trigger.json.title }}"
+          message: "{{ trigger.json.url }}"
+```
+
 **Local files:** Enable file URL access in the browser's extension details if you want page extraction from local files. If injection is unavailable, manual sending falls back to the browser tab's URL and title.
 
 ---
 
 ## Usage
 
-- Click the extension icon on any page to send its info directly to your Home Assistant webhook. The popup shows real-time status, a payload preview, and a one-click copy-to-clipboard button.
-- Or, select text on a web page, then right click and select Send to Home Assistant (Default) in the context menu.
+- Click the extension icon, select a profile (your default is preselected), and click **Send**. The popup shows the payload and lets you copy its JSON.
+- Right-click a page, link, or selected text and select **Send to Home Assistant**, then choose **Default**, **YTDL**, **Save**, or any other custom profile. The configured default is marked in the menu.
+- If you prefer the previous one-click behavior, enable **Automatically send the default when the popup opens** in Options. Alternative profiles remain available from the right-click menu, and you can send a second time from the popup.
 - Create an automation based on the received payload.
   - For example, I use it to send links right to my phone. See [Automation Examples](https://github.com/JOHLC/Send-to-Home-Assistant/blob/main/config/automations.md).
 
