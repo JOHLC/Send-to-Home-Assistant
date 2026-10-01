@@ -132,6 +132,7 @@ function showPreview(pageInfo) {
     }
     row.append(name, field);
     previewDiv.appendChild(row);
+    return row;
   }
   addRow('Title:', pageInfo.title);
   const link = document.createElement('a');
@@ -156,7 +157,7 @@ function showPreview(pageInfo) {
   img.src = (String(pageInfo.favicon || '').startsWith('https://') ||
     String(pageInfo.favicon || '').startsWith('http://')) ?
     pageInfo.favicon : chrome.runtime.getURL('icon-256.png');
-  addRow('Favicon:', img);
+  addRow('Favicon:', img).classList.add('preview-row-center');
   if (pageInfo.selected) {
     addRow('Selected:', pageInfo.selected);
   }
