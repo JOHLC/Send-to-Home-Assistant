@@ -6,9 +6,10 @@
   "scripts": {
     "lint": "eslint package/*.js",
     "lint:fix": "eslint package/*.js --fix",
-    "test": "echo \"Manual testing with tests/xss-test.html\"",
+    "test": "node --test",
     "validate": "node scripts/validate-manifest.js",
-    "package": "node scripts/package-extension.js"
+    "package": "node scripts/package-extension.js",
+    "check": "npm run lint && npm run validate && npm test && npm run package"
   },
   "repository": {
     "type": "git",
@@ -28,7 +29,7 @@
     "eslint": "^8.57.1"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=20.0.0"
   },
   "browserslist": [
     "Chrome >= 88",
