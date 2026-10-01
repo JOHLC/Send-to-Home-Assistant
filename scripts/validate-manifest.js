@@ -105,7 +105,7 @@ function validateManifest() {
   }
   for (const file of ['popup.html', 'options.html']) {
     const html = fs.readFileSync(path.join(__dirname, '../package', file), 'utf8');
-    if (/\\son(?:error|load|click)\\s*=/.test(html)) {
+    if (/\son(?:error|load|click)\s*=/.test(html)) {
       errors.push(file + ' contains an inline event handler');
     }
   }
