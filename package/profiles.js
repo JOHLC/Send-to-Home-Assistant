@@ -21,7 +21,7 @@
       }
       const name = typeof profile.name === 'string' ? profile.name.trim() : '';
       const context = typeof profile.context === 'string' ? profile.context.trim() : '';
-      if (!name || name.length > 40 || /[\u0000-\u001f\u007f]/.test(name)) {
+      if (!name || name.length > 40 || [...name].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
         throw new Error('Profile names must be 1-40 printable characters.');
       }
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(context)) {
@@ -74,7 +74,7 @@
   }
 
   function resolveProfile(settings, selectedId) {
-    const id = selectedId == null ? settings.defaultProfileId : selectedId;
+    const id = (selectedId === null || selectedId === undefined) ? settings.defaultProfileId : selectedId;
     const profile = listProfiles(settings).find((entry) => entry.id === id);
     if (!profile) {
       throw new Error('The selected send profile no longer exists. Choose another profile.');
