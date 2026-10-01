@@ -85,7 +85,7 @@ test('injected page collector has no closure dependencies and rejects unsafe fav
   assert.equal(data.url, 'https://www.example.com/article');
   assert.equal(data.selected, 'selected text');
   assert.equal(data.favicon, 'https://www.example.com/logo.png');
-  assert.match(data.timestamp, /^\\d{4}-/);
+  assert.ok(Number.isFinite(Date.parse(data.timestamp)));
 });
 
 test('webhook URLs validate the host and encode supported IDs', () => {
