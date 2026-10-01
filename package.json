@@ -32,7 +32,7 @@
     "node": ">=20.0.0"
   },
   "browserslist": [
-    "Chrome >= 88",
-    "Edge >= 88"
+    "Chrome >= 96",
+    "Edge >= 96"
   ]
 }
