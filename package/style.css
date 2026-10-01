@@ -383,3 +383,12 @@ button:active, .ok-btn:active {
   outline: none;
   box-shadow: 0 4px 16px #00b4fc55;
 }
+
+.ssl-warning {
+  color: #ffb347;
+  background: rgba(255, 180, 71, 0.08);
+  border: 1px solid #ffb347;
+  border-radius: 8px;
+  padding: 0.7em 1em;
+  margin: 0.7em 0 1em 0;
+}
