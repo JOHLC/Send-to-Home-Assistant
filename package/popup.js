@@ -272,6 +272,7 @@ async function initializePopup() {
       profileSelect.appendChild(option);
     }
     profileSelect.value = settings.defaultProfileId;
+    sendBtn.disabled = false;
     if (settings.quickSendDefault) {
       await sendToHA();
     }
