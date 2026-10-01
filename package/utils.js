@@ -477,7 +477,10 @@ async function sendToHomeAssistant(options) {
       pageInfo = {
         title: tab.title,
         url: contextInfo.linkUrl || contextInfo.pageUrl || tab.url,
-        favicon: tab.favIconUrl || chrome.runtime.getURL('icon-256.png'),
+        favicon: (String(tab.favIconUrl || '').startsWith('https://') ||
+          String(tab.favIconUrl || '').startsWith('http://')) &&
+          !String(tab.favIconUrl).toLowerCase().includes('.svg') ? tab.favIconUrl :
+          'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/main/package/icon-256.png',
         selected: contextInfo.selectionText || '',
         timestamp: new Date().toISOString(),
         user_agent: navigator.userAgent,
@@ -500,7 +503,8 @@ async function sendToHomeAssistant(options) {
         pageInfo = {
           title: tab.title || '',
           url: tab.url,
-          favicon: /^https?:\\/\\//.test(tab.favIconUrl || '') ?
+          favicon: (String(tab.favIconUrl || '').startsWith('https://') ||
+            String(tab.favIconUrl || '').startsWith('http://')) ?
             tab.favIconUrl : 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/main/package/icon-256.png',
           selected: '',
           timestamp: new Date().toISOString(),
