@@ -22,9 +22,15 @@
   </button>
   <div class="container">
     <div class="icon"><img src="icon-256.png" width="36" height="36" alt="HA"></div>
-    <div class="msg" id="popupMsg">Sending...</div>
+    <label class="profile-popup-label" for="profileSelect">Send as</label>
+    <select id="profileSelect" class="profile-select" aria-label="Send profile">
+      <option value="default">Default</option>
+    </select>
+    <button id="sendBtn" class="copy-btn" type="button">Send to Home Assistant</button>
+    <div class="msg" id="popupMsg" role="status" aria-live="polite">Choose a profile and send.</div>
   <button class="ok-btn hidden" id="okBtn">OK</button>
   </div>
+  <script src="profiles.js"></script>
   <script src="utils.js"></script>
   <script src="popup.js"></script>
 </body>
