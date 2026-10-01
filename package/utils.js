@@ -437,7 +437,7 @@ async function sendToHomeAssistant(options) {
     const error = new Error('This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.');
     if (onError) {onError(error);}
     if (showNotifications) {
-      createNotification(error.message, notificationId, 'icon-256.png');
+      createNotification(error.message, notificationId).catch(console.warn);
     }
     return { status: 'error', error: error.message };
   }
@@ -450,7 +450,7 @@ async function sendToHomeAssistant(options) {
       const errorMessage = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
       chrome.runtime.openOptionsPage();
       if (showNotifications) {
-        createNotification(errorMessage, notificationId, 'icon-256.png');
+        createNotification(errorMessage, notificationId).catch(console.warn);
       }
       if (onError) {onError(new Error(errorMessage));}
       return { status: 'error', error: 'No webhook host or ID set.' };
@@ -468,7 +468,7 @@ async function sendToHomeAssistant(options) {
     // Show progress
     if (onProgress) {onProgress('Sending to Home Assistant...');}
     if (showNotifications) {
-      createNotification('Sending to Home Assistant...', notificationId, 'icon-256.png');
+      createNotification('Sending to Home Assistant...', notificationId).catch(console.warn);
     }
 
     let pageInfo;
@@ -525,7 +525,7 @@ async function sendToHomeAssistant(options) {
     const successMessage = 'Sent to Home Assistant!';
     if (onProgress) {onProgress(successMessage);}
     if (showNotifications) {
-      updateNotification(notificationId, successMessage, 'icon-256.png');
+      createNotification(successMessage, notificationId).catch(console.warn);
     }
     if (onSuccess) {onSuccess(pageInfo);}
 
@@ -534,10 +534,10 @@ async function sendToHomeAssistant(options) {
   } catch (error) {
     console.error('Send to Home Assistant failed:', error);
     
-    const errorMessage = `Error: ${escapeHTML(error.message)}`;
+    const errorMessage = 'Error: ' + error.message;
     if (onProgress) {onProgress(errorMessage);}
     if (showNotifications) {
-      updateNotification(notificationId, errorMessage, 'icon-256.png');
+      createNotification(errorMessage, notificationId).catch(console.warn);
     }
     if (onError) {onError(error);}
 
