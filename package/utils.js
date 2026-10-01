@@ -458,7 +458,8 @@ async function sendToHomeAssistant(options) {
 
     // The user grants access to the configured Home Assistant origin in Options.
     const webhookUrl = createWebhookUrl(config.haHost, config.ssl, config.webhookId);
-    const origin = new URL(webhookUrl).origin + '/*';
+    const endpoint = new URL(webhookUrl);
+    const origin = endpoint.protocol + '//' + endpoint.hostname + '/*';
     const allowed = await chrome.permissions.contains({ origins: [origin] });
     if (!allowed) {
       throw new Error('Home Assistant site access is missing. Open extension settings and save again to grant access.');
