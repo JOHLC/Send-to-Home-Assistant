@@ -91,6 +91,25 @@ function validateManifest() {
     }
   }
 
+  // Production permissions and CSP checks
+  if ((manifest.host_permissions || []).includes('<all_urls>')) {
+    errors.push('Persistent <all_urls> access is not permitted');
+  }
+  if (!(manifest.optional_host_permissions || []).includes('https://*/*')) {
+    errors.push('HTTPS optional host permission is required for user-selected HA instances');
+  }
+  for (const file of ['background.js', 'popup.html', 'popup.js', 'options.html', 'options.js', 'utils.js', 'icon-256.png']) {
+    if (!fs.existsSync(path.join(__dirname, '../package', file))) {
+      errors.push('Missing extension runtime file: ' + file);
+    }
+  }
+  for (const file of ['popup.html', 'options.html']) {
+    const html = fs.readFileSync(path.join(__dirname, '../package', file), 'utf8');
+    if (/\son(?:error|load|click)\s*=/.test(html)) {
+      errors.push(file + ' contains an inline event handler');
+    }
+  }
+
   // Host permissions check (Manifest V3)
   if (manifest.host_permissions && manifest.host_permissions.includes('<all_urls>')) {
     warnings.push('Using <all_urls> host permission - consider being more specific');

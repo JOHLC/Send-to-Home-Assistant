@@ -52,10 +52,25 @@ function escapeHTML(str) {
  * @returns {string} The complete webhook URL
  */
 function createWebhookUrl(host, ssl, webhookId) {
-  if (!host || !webhookId) {
-    throw new Error('Host and webhook ID are required');
+  if (typeof host !== 'string' || typeof webhookId !== 'string' ||
+      !/^[A-Za-z0-9_.~-]{1,256}$/.test(webhookId)) {
+    throw new Error('Enter a hostname and a valid webhook ID (letters, numbers, underscores or hyphens).');
   }
-  return `${ssl ? 'https' : 'http'}://${host}/api/webhook/${webhookId}`;
+  const hostname = host.trim();
+  if (!/^(?:[A-Za-z0-9.-]+|\[[0-9a-fA-F:]+\])(?::[0-9]{1,5})?$/.test(hostname)) {
+    throw new Error('Enter only a hostname or IP address, with an optional port.');
+  }
+  let url;
+  try {
+    url = new URL((ssl ? 'https://' : 'http://') + hostname);
+  } catch (_) {
+    throw new Error('Invalid Home Assistant hostname or port.');
+  }
+  if (!url.hostname || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('Invalid Home Assistant hostname or port.');
+  }
+  url.pathname = '/api/webhook/' + encodeURIComponent(webhookId);
+  return url.href;
 }
 
 /**
@@ -253,18 +268,39 @@ function getSelectedText() {
  * @param {object} options - Additional options (user, device, etc.)
  * @returns {object} Page information object
  */
-function createPageInfo(options = {}) {
+function createPageInfo() {
+  // executeScript serializes this function; do not reference helpers from utils.js.
+  const fallback = 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/main/package/icon-256.png';
+  const priority = { png: 1, jpg: 2, jpeg: 2, webp: 3, ico: 4 };
+  const icons = Array.from(document.querySelectorAll('link[rel~="icon"]'))
+    .map((link) => {
+      try {
+        const url = new URL(link.getAttribute('href'), document.baseURI);
+        const type = (link.getAttribute('type') || '').toLowerCase();
+        const extension = url.pathname.slice(url.pathname.lastIndexOf('.') + 1).toLowerCase();
+        const format = type.includes('png') ? 'png' :
+          type.includes('jpeg') ? 'jpeg' :
+            type.includes('webp') ? 'webp' :
+              type.includes('icon') ? 'ico' : extension;
+        return { url: url.href, rank: priority[format] || 99 };
+      } catch (_) {
+        return { url: '', rank: 99 };
+      }
+    })
+    .filter((candidate) => (candidate.url.startsWith('https://') || candidate.url.startsWith('http://')) &&
+      candidate.rank < 99)
+    .sort((a, b) => a.rank - b.rank);
+  const defaultIcon = /^https?:$/.test(location.protocol) ?
+    new URL('/favicon.ico', location.origin).href : fallback;
   return {
-    title: document.title,
+    title: document.title || '',
     url: window.location.href,
-    favicon: getFavicon(),
-    selected: getSelectedText(),
+    favicon: icons.length ? icons[0].url : defaultIcon,
+    selected: window.getSelection ? window.getSelection().toString() : '',
     timestamp: new Date().toISOString(),
     user_agent: navigator.userAgent,
-    ...options,
   };
 }
-
 /**
  * Formats a timestamp for display
  * @param {string} timestamp - ISO timestamp string
@@ -280,31 +316,26 @@ function formatTimestamp(timestamp) {
  * @returns {boolean} True if restricted, false otherwise
  */
 function isRestrictedPage(url) {
-  if (!url) {
+  if (typeof url !== 'string') {
     return true;
   }
-  return url.startsWith('chrome://') ||
-         url.startsWith('edge://') ||
-         url.startsWith('extension://') ||
-         url.startsWith('moz-extension://') ||
-         url.startsWith('chrome-extension://') ||
-         url.startsWith('about:');
+  try {
+    return !['http:', 'https:', 'file:'].includes(new URL(url).protocol);
+  } catch (_) {
+    return true;
+  }
 }
 /**
- * Debounce function to limit function calls
- * @param {Function} func - Function to debounce
- * @param {number} wait - Wait time in milliseconds
- * @returns {Function} Debounced function
+ * Debounce repeated calls. Preserved as part of the shared utility API.
+ * @param {Function} func - Callback
+ * @param {number} wait - Delay in milliseconds
+ * @returns {Function} Debounced callback
  */
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
     clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
 }
 
@@ -312,20 +343,49 @@ function debounce(func, wait) {
  * Gets configuration from storage with defaults
  * @returns {Promise<object>} Configuration object
  */
-function getStorageConfig() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
-      resolve({
-        haHost: result.haHost,
-        ssl: typeof result.ssl === 'boolean' ? result.ssl : true,
-        webhookId: result.webhookId,
-        userName: result.userName,
-        deviceName: result.deviceName,
-      });
+async function getStorageConfig() {
+  const read = (area, keys) => new Promise((resolve, reject) => {
+    chrome.storage[area].get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error('Could not read extension settings: ' + chrome.runtime.lastError.message));
+      } else {
+        resolve(result);
+      }
     });
   });
+  const [synced, local] = await Promise.all([
+    read('sync', ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName']),
+    read('local', ['webhookId']),
+  ]);
+  // One-time migration from the previous synchronized webhook ID.
+  if (!local.webhookId && synced.webhookId) {
+    await new Promise((resolve, reject) => {
+      chrome.storage.local.set({ webhookId: synced.webhookId }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error('Could not migrate webhook settings: ' + chrome.runtime.lastError.message));
+        } else {
+          resolve();
+        }
+      });
+    });
+    await new Promise((resolve, reject) => {
+      chrome.storage.sync.remove('webhookId', () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error('Could not remove old synchronized webhook ID: ' + chrome.runtime.lastError.message));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+  return {
+    haHost: synced.haHost,
+    ssl: typeof synced.ssl === 'boolean' ? synced.ssl : true,
+    webhookId: local.webhookId || synced.webhookId,
+    userName: synced.userName,
+    deviceName: synced.deviceName,
+  };
 }
-
 /**
  * Sends data to webhook with proper error handling
  * @param {string} webhookUrl - The webhook URL
@@ -333,19 +393,28 @@ function getStorageConfig() {
  * @returns {Promise<Response>}
  */
 async function sendToWebhook(webhookUrl, data) {
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error('Home Assistant returned HTTP ' + response.status + '.');
+    }
+    return response;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Webhook timed out after 15 seconds.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return response;
 }
-
 /**
  * Unified function to send page information to Home Assistant
  * Handles both context menu and direct sending scenarios
@@ -381,7 +450,7 @@ async function sendToHomeAssistant(options) {
     const error = new Error('This extension cannot send data from browser internal pages (settings, extensions, etc.). Please navigate to a regular website and try again.');
     if (onError) {onError(error);}
     if (showNotifications) {
-      createNotification(error.message, notificationId, 'icon-256.png');
+      createNotification(error.message, notificationId).catch(console.warn);
     }
     return { status: 'error', error: error.message };
   }
@@ -394,19 +463,25 @@ async function sendToHomeAssistant(options) {
       const errorMessage = 'Please set your Home Assistant hostname and webhook ID in the extension options.';
       chrome.runtime.openOptionsPage();
       if (showNotifications) {
-        createNotification(errorMessage, notificationId, 'icon-256.png');
+        createNotification(errorMessage, notificationId).catch(console.warn);
       }
       if (onError) {onError(new Error(errorMessage));}
       return { status: 'error', error: 'No webhook host or ID set.' };
     }
 
-    // Create webhook URL
+    // The user grants access to the configured Home Assistant origin in Options.
     const webhookUrl = createWebhookUrl(config.haHost, config.ssl, config.webhookId);
+    const endpoint = new URL(webhookUrl);
+    const origin = endpoint.protocol + '//' + endpoint.hostname + '/*';
+    const allowed = await chrome.permissions.contains({ origins: [origin] });
+    if (!allowed) {
+      throw new Error('Home Assistant site access is missing. Open extension settings and save again to grant access.');
+    }
 
     // Show progress
     if (onProgress) {onProgress('Sending to Home Assistant...');}
     if (showNotifications) {
-      createNotification('Sending to Home Assistant...', notificationId, 'icon-256.png');
+      createNotification('Sending to Home Assistant...', notificationId).catch(console.warn);
     }
 
     let pageInfo;
@@ -416,23 +491,40 @@ async function sendToHomeAssistant(options) {
       pageInfo = {
         title: tab.title,
         url: contextInfo.linkUrl || contextInfo.pageUrl || tab.url,
-        favicon: tab.favIconUrl || chrome.runtime.getURL('icon-256.png'),
+        favicon: (String(tab.favIconUrl || '').startsWith('https://') ||
+          String(tab.favIconUrl || '').startsWith('http://')) &&
+          !String(tab.favIconUrl).toLowerCase().includes('.svg') ? tab.favIconUrl :
+          'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/main/package/icon-256.png',
         selected: contextInfo.selectionText || '',
         timestamp: new Date().toISOString(),
         user_agent: navigator.userAgent,
       };
     } else {
       // Direct send scenario - get page info via scripting
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: createPageInfo,
-      });
-
-      if (!results || !results[0] || !results[0].result) {
-        throw new Error('Could not get page info.');
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: createPageInfo,
+        });
+        if (!results || !results[0] || !results[0].result) {
+          throw new Error('Page extraction returned no data.');
+        }
+        pageInfo = results[0].result;
+      } catch (error) {
+        // Permissions, navigation races and browser-restricted documents can
+        // prevent injection. Still allow manual sending of tab metadata.
+        console.warn('Using tab metadata instead of page extraction:', error.message);
+        pageInfo = {
+          title: tab.title || '',
+          url: tab.url,
+          favicon: (String(tab.favIconUrl || '').startsWith('https://') ||
+            String(tab.favIconUrl || '').startsWith('http://')) ?
+            tab.favIconUrl : 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/main/package/icon-256.png',
+          selected: '',
+          timestamp: new Date().toISOString(),
+          user_agent: navigator.userAgent,
+        };
       }
-
-      pageInfo = results[0].result;
     }
 
     // Add user and device information
@@ -450,7 +542,7 @@ async function sendToHomeAssistant(options) {
     const successMessage = 'Sent to Home Assistant!';
     if (onProgress) {onProgress(successMessage);}
     if (showNotifications) {
-      updateNotification(notificationId, successMessage, 'icon-256.png');
+      createNotification(successMessage, notificationId).catch(console.warn);
     }
     if (onSuccess) {onSuccess(pageInfo);}
 
@@ -459,10 +551,10 @@ async function sendToHomeAssistant(options) {
   } catch (error) {
     console.error('Send to Home Assistant failed:', error);
     
-    const errorMessage = `Error: ${escapeHTML(error.message)}`;
+    const errorMessage = 'Error: ' + error.message;
     if (onProgress) {onProgress(errorMessage);}
     if (showNotifications) {
-      updateNotification(notificationId, errorMessage, 'icon-256.png');
+      createNotification(errorMessage, notificationId).catch(console.warn);
     }
     if (onError) {onError(error);}
 

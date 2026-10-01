@@ -4,20 +4,32 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-and-zip:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout release tag
         uses: actions/checkout@v4
-
-      - name: Zip extension package
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          cd package
-          zip -r ../send-to-ha-extension.zip .
-
-      - name: Upload Release Asset
+          node -e "const v=require('./package/manifest.json').version;const tag=process.env.RELEASE_TAG.replace(/^v/,'');if(v!==tag){console.error('Release tag does not match manifest version');process.exit(1)}"
+      - name: Run production checks and package
+        run: npm run check
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          files: send-to-ha-extension.zip
-          token: ${{ secrets.GH_FINEGRAINED_TOKEN }}
+          files: dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

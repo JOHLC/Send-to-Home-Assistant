@@ -1,94 +1,59 @@
 #!/usr/bin/env node
+'use strict';
+// Produce a minimal installable ZIP without undeclared npm dependencies.
+// zip is standard on macOS/Linux and Compress-Archive ships with Windows.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
-/**
- * Extension Packaging Script
- * 
- * Creates a distributable ZIP file of the extension for Chrome Web Store submission.
- * Excludes development files and includes only necessary extension files.
- */
-
-const fs = require('fs');
-const path = require('path');
-const archiver = require('archiver');
-
-const PACKAGE_DIR = path.join(__dirname, '../package');
-const OUTPUT_DIR = path.join(__dirname, '../dist');
-const MANIFEST_PATH = path.join(PACKAGE_DIR, 'manifest.json');
+const root = path.resolve(__dirname, '..');
+const source = path.join(root, 'package');
+const destination = path.join(root, 'dist');
+const manifest = JSON.parse(fs.readFileSync(path.join(source, 'manifest.json'), 'utf8'));
+const files = [
+  'manifest.json', 'background.js', 'popup.html', 'popup.js',
+  'options.html', 'options.js', 'utils.js', 'inpage-alert.js',
+  'style.css', 'icon-256.png',
+];
 
 function createPackage() {
-  console.log('📦 Creating extension package...\n');
-
-  // Ensure output directory exists
-  if (!fs.existsSync(OUTPUT_DIR)) {
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  for (const file of files) {
+    if (!fs.statSync(path.join(source, file), { throwIfNoEntry: false })?.isFile()) {
+      throw new Error('Required extension file missing: ' + file);
+    }
   }
-
-  // Read version from manifest
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
-  const version = manifest.version;
-  const outputFile = path.join(OUTPUT_DIR, `send-to-home-assistant-v${version}.zip`);
-
-  // Create output stream
-  const output = fs.createWriteStream(outputFile);
-  const archive = archiver('zip', { zlib: { level: 9 } });
-
-  // Handle events
-  output.on('close', () => {
-    console.log(`✅ Package created successfully!`);
-    console.log(`📁 Output: ${outputFile}`);
-    console.log(`📊 Size: ${(archive.pointer() / 1024).toFixed(2)} KB`);
-  });
-
-  archive.on('warning', (err) => {
-    if (err.code === 'ENOENT') {
-      console.warn('⚠️  Warning:', err.message);
-    } else {
-      throw err;
-    }
-  });
-
-  archive.on('error', (err) => {
-    throw err;
-  });
-
-  // Pipe archive data to the file
-  archive.pipe(output);
-
-  // Add files from package directory
-  const filesToInclude = [
-    'manifest.json',
-    'background.js',
-    'popup.html',
-    'popup.js',
-    'options.html', 
-    'options.js',
-    'utils.js',
-    'inpage-alert.js',
-    'style.css',
-    'icon-256.png'
-  ];
-
-  console.log('📂 Including files:');
-  filesToInclude.forEach(file => {
-    const filePath = path.join(PACKAGE_DIR, file);
-    if (fs.existsSync(filePath)) {
-      archive.file(filePath, { name: file });
-      console.log(`   ✓ ${file}`);
-    } else {
-      console.warn(`   ⚠️  Missing: ${file}`);
-    }
-  });
-
-  // Finalize the archive
-  archive.finalize();
+  fs.mkdirSync(destination, { recursive: true });
+  const output = path.join(destination, 'send-to-home-assistant-v' + manifest.version + '.zip');
+  fs.rmSync(output, { force: true });
+  let result;
+  if (os.platform() === 'win32') {
+    const psQuote = (value) => "'" + value.replaceAll("'", "''") + "'";
+    const command = 'Compress-Archive -LiteralPath @(' +
+      files.map((file) => psQuote(path.join(source, file))).join(',') +
+      ') -DestinationPath ' + psQuote(output) + ' -CompressionLevel Optimal -Force';
+    result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command],
+      { encoding: 'utf8' });
+  } else {
+    result = spawnSync('zip', ['-q', '-X', output, ...files],
+      { cwd: source, encoding: 'utf8' });
+  }
+  if (result.error || result.status !== 0) {
+    throw new Error('ZIP creation failed: ' + (result.error?.message || result.stderr || result.status));
+  }
+  if (!fs.statSync(output).size) {
+    throw new Error('ZIP archive is empty');
+  }
+  console.log('Created ' + output);
+  return output;
 }
 
 if (require.main === module) {
   try {
     createPackage();
   } catch (error) {
-    console.error('❌ Packaging failed:', error.message);
-    process.exit(1);
+    console.error(error.message);
+    process.exitCode = 1;
   }
 }
 

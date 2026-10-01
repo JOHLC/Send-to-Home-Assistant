@@ -80,7 +80,7 @@ function checkForUpdate() {
     ExtensionUtils.EXTENSION_CONFIG;
   
   chrome.storage.local.get(['updateCheckEnabled', UPDATE_CHECK_KEY, UPDATE_INFO_KEY], (data) => {
-    if (data.updateCheckEnabled === false) {
+    if (data.updateCheckEnabled !== true) {
       // User disabled update checks - clean up stored data
       chrome.storage.local.remove([UPDATE_INFO_KEY, UPDATE_CHECK_KEY]);
       return;
@@ -154,6 +154,10 @@ let lastSendStatus = null;
  * Handle messages from popup
  */
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.type === 'update-preference-changed') {
+    checkForUpdate();
+    sendResponse({ status: 'ok' });
+  }
   if (msg && msg.popupOpened) {
     sendResponse(lastSendStatus || { status: 'pending' });
   }

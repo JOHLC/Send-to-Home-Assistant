@@ -117,59 +117,51 @@ function showButton() {
 function showPreview(pageInfo) {
   const previewDiv = document.createElement('div');
   previewDiv.className = 'preview';
-  
-  // Title row
-  const titleRow = document.createElement('div');
-  titleRow.className = 'preview-row';
-  titleRow.innerHTML = `
-    <span class="preview-label">Title:</span>
-    <span class="preview-value">${ExtensionUtils.escapeHTML(pageInfo.title)}</span>
-  `;
-  previewDiv.appendChild(titleRow);
-  
-  // URL row
-  const urlRow = document.createElement('div');
-  urlRow.className = 'preview-row';
-  urlRow.innerHTML = `
-    <span class="preview-label">URL:</span>
-    <span class="preview-value">
-      <a href="${ExtensionUtils.escapeHTML(pageInfo.url)}" target="_blank" class="preview-url link-blue">${ExtensionUtils.escapeHTML(pageInfo.url)}</a>
-    </span>
-  `;
-  previewDiv.appendChild(urlRow);
-  
-  // Favicon row
-  const faviconRow = document.createElement('div');
-  faviconRow.className = 'preview-row preview-row-center';
-  faviconRow.innerHTML = `
-    <span class="preview-label">Favicon:</span>
-    <img src="${ExtensionUtils.escapeHTML(pageInfo.favicon)}" 
-         alt="favicon" 
-         class="preview-favicon"
-         onerror="this.src='${chrome.runtime.getURL('icon-256.png')}'; this.classList.add('preview-favicon-placeholder');">
-  `;
-  previewDiv.appendChild(faviconRow);
-  
-  // Selected text row (if any)
-  if (pageInfo.selected) {
-    const selectedRow = document.createElement('div');
-    selectedRow.className = 'preview-row';
-    selectedRow.innerHTML = `
-      <span class="preview-label">Selected:</span>
-      <span class="preview-value">${ExtensionUtils.escapeHTML(pageInfo.selected)}</span>
-    `;
-    previewDiv.appendChild(selectedRow);
+  function addRow(label, value) {
+    const row = document.createElement('div');
+    row.className = 'preview-row';
+    const name = document.createElement('span');
+    name.className = 'preview-label';
+    name.textContent = label;
+    const field = document.createElement('span');
+    field.className = 'preview-value';
+    if (value instanceof Node) {
+      field.appendChild(value);
+    } else {
+      field.textContent = String(value || '');
+    }
+    row.append(name, field);
+    previewDiv.appendChild(row);
+    return row;
   }
-  
-  // Timestamp row
-  const timestampRow = document.createElement('div');
-  timestampRow.className = 'preview-row';
-  timestampRow.innerHTML = `
-    <span class="preview-label">Time:</span>
-    <span class="preview-value">${ExtensionUtils.formatTimestamp(pageInfo.timestamp)}</span>
-  `;
-  previewDiv.appendChild(timestampRow);
-  
+  addRow('Title:', pageInfo.title);
+  const link = document.createElement('a');
+  const url = String(pageInfo.url || '');
+  if (url.startsWith('https://') || url.startsWith('http://')) {
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+  }
+  link.className = 'preview-url link-blue';
+  link.textContent = url;
+  addRow('URL:', link);
+  const img = document.createElement('img');
+  img.className = 'preview-favicon';
+  img.alt = 'Page favicon';
+  img.addEventListener('error', () => {
+    if (img.src !== chrome.runtime.getURL('icon-256.png')) {
+      img.src = chrome.runtime.getURL('icon-256.png');
+      img.classList.add('preview-favicon-placeholder');
+    }
+  });
+  img.src = (String(pageInfo.favicon || '').startsWith('https://') ||
+    String(pageInfo.favicon || '').startsWith('http://')) ?
+    pageInfo.favicon : chrome.runtime.getURL('icon-256.png');
+  addRow('Favicon:', img).classList.add('preview-row-center');
+  if (pageInfo.selected) {
+    addRow('Selected:', pageInfo.selected);
+  }
+  addRow('Time:', ExtensionUtils.formatTimestamp(pageInfo.timestamp));
   msgDiv.appendChild(previewDiv);
   addCopyButton(pageInfo);
 }
@@ -196,7 +188,7 @@ function addCopyButton(pageInfo) {
 
   copyWrapper.appendChild(copyBtn);
 
-  copyBtn.addEventListener('click', async () => {
+  copyBtn.addEventListener('click', async() => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(pageInfo, null, 2));
       copyBtn.textContent = 'Copied!';

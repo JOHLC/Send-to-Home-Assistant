@@ -161,14 +161,21 @@ label {
   width: auto;
   align-self: center;
 }
-input[type="text"] {
+input[type="text"],
+input[type="password"],
+.profile-select {
+  box-sizing: border-box;
   width: 100%;
   padding: 0.7em 1em;
-  font-size: 1.08em;
+  font-size: 1em;
   border: 2px solid #00b4fc;
   border-radius: 10px;
-  margin-left: 0;
-  margin-right: 0;
+  margin: 0 0 1em;
+  background: #1a223f;
+  color: #eaf6ff;
+  transition: border 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1.5px 8px #00b4fc22;
+}
 .webhook-row {
   display: flex;
   align-items: flex-end;
@@ -185,13 +192,8 @@ input[type="text"] {
   margin-bottom: 2px;
   min-width: 70px;
 }
-  margin-bottom: 1em;
-  background: #1a223f;
-  color: #eaf6ff;
-  transition: border 0.2s, box-shadow 0.2s;
-  box-shadow: 0 1.5px 8px #00b4fc22;
-}
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="password"]:focus {
   border: 2.5px solid #00b4fc;
   outline: none;
   box-shadow: 0 2px 12px #00b4fc44;
@@ -380,4 +382,13 @@ button:active, .ok-btn:active {
   border: 1.5px solid #fff;
   outline: none;
   box-shadow: 0 4px 16px #00b4fc55;
+}
+
+.ssl-warning {
+  color: #ffb347;
+  background: rgba(255, 180, 71, 0.08);
+  border: 1px solid #ffb347;
+  border-radius: 8px;
+  padding: 0.7em 1em;
+  margin: 0.7em 0 1em 0;
 }

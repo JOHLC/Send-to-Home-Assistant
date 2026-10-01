@@ -63,12 +63,14 @@ function initializeUpdateChecking() {
   chrome.storage.local.get('updateCheckEnabled', (data) => {
     updateCheckToggle.checked = typeof data.updateCheckEnabled === 'boolean' 
       ? data.updateCheckEnabled 
-      : true; // default to enabled
+      : false; // opt-in
   });
 
   // Handle toggle changes
   updateCheckToggle.addEventListener('change', () => {
-    chrome.storage.local.set({ updateCheckEnabled: updateCheckToggle.checked });
+    chrome.storage.local.set({ updateCheckEnabled: updateCheckToggle.checked }, () => {
+      chrome.runtime.sendMessage({ type: 'update-preference-changed' }).catch(console.warn);
+    });
     
     // Show/hide update status based on toggle
     if (updateDiv) {
@@ -85,62 +87,57 @@ function initializeUpdateChecking() {
  * @param {HTMLElement} updateDiv - Update status container element
  */
 function displayUpdateStatus(updateDiv) {
-  if (!updateDiv || !chrome.storage || !chrome.storage.local) {
+  if (!updateDiv || !chrome.storage?.local) {
     return;
   }
-
   chrome.storage.local.get(['updateInfo', 'updateCheckEnabled'], (data) => {
     const info = data.updateInfo;
-    const enabled = typeof data.updateCheckEnabled === 'boolean' 
-      ? data.updateCheckEnabled 
-      : true;
-
-    // Hide if disabled
-    if (!enabled) {
-      updateDiv.classList.add('hidden');
+    const enabled = data.updateCheckEnabled === true;
+    updateDiv.classList.toggle('hidden', !enabled);
+    updateDiv.replaceChildren();
+    if (!enabled || !info) {
       return;
     }
-
-    updateDiv.classList.remove('hidden');
-
-    // Show update information
-    if (info && info.isNewer && info.latest && info.html_url) {
-      updateDiv.innerHTML = `
-        <div class="update-available">
-          New version available: 
-          <a href="${escapeHTML(info.html_url)}" target="_blank" rel="noopener noreferrer" class="link-blue">
-            v${escapeHTML(info.latest)}
-          </a>
-        </div>
-      `;
-    } else if (info && !info.isNewer) {
-      updateDiv.innerHTML = '<div class="update-latest">You are using the latest version.</div>';
-    } else {
-      updateDiv.innerHTML = '';
+    const message = document.createElement('div');
+    if (info.isNewer && info.latest && info.html_url) {
+      try {
+        const url = new URL(info.html_url);
+        if (url.protocol !== 'https:' || url.hostname !== 'github.com' ||
+            !url.pathname.startsWith('/JOHLC/Send-to-Home-Assistant/releases/')) {
+          throw new Error('Unexpected release URL');
+        }
+        const link = document.createElement('a');
+        link.href = url.href;
+        link.textContent = 'v' + info.latest;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'link-blue';
+        message.className = 'update-available';
+        message.append('New version available: ', link);
+      } catch (_) {
+        message.textContent = 'Update available. Visit the project releases page.';
+      }
+    } else if (!info.isNewer) {
+      message.className = 'update-latest';
+      message.textContent = 'You are using the latest published release.';
     }
+    updateDiv.appendChild(message);
   });
 }
 /**
  * Load saved configuration from storage
  */
 function loadSavedConfiguration() {
-  chrome.storage.sync.get(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], (result) => {
-    if (result.haHost) {
-      hostInput.value = result.haHost;
+  ExtensionUtils.getStorageConfig().then((result) => {
+    hostInput.value = result.haHost || '';
+    sslToggle.checked = result.ssl;
+    webhookIdInput.value = result.webhookId || '';
+    userInput.value = result.userName || '';
+    if (deviceInput) {
+      deviceInput.value = result.deviceName || '';
     }
-    if (typeof result.ssl === 'boolean') {
-      sslToggle.checked = result.ssl;
-    }
-    if (result.webhookId) {
-      webhookIdInput.value = result.webhookId;
-    }
-    if (result.userName) {
-      userInput.value = result.userName;
-    }
-    if (result.deviceName && deviceInput) {
-      deviceInput.value = result.deviceName;
-    }
-  });
+    updateSslWarning();
+  }).catch((error) => showStatus(error.message, 'error'));
 }
 
 /**
@@ -167,67 +164,105 @@ function setupEventListeners() {
 /**
  * Handle save button click
  */
-function handleSave() {
+async function handleSave() {
   const config = getFormConfiguration();
-  
-  // Validate configuration
   const validation = validateConfiguration(config);
   if (!validation.valid) {
     showStatus(validation.message, 'error');
     return;
   }
 
-  // Show validating status
-  showStatus('Validating webhook...', '');
+  saveBtn.disabled = true;
+  let requestedOrigin = null;
+  let previousOrigin = null;
+  let saved = false;
+  try {
+    // Chrome requires permissions.request to run from the Save click's user gesture.
+    requestedOrigin = await requestWebhookPermission(config);
+    const previous = await ExtensionUtils.getStorageConfig();
+    previousOrigin = configuredWebhookOrigin(previous);
 
-  // Test webhook accessibility before saving
-  testWebhookAccessibility(config)
-    .then(() => {
-      // Save configuration
-      return saveConfiguration(config);
-    })
-    .then(() => {
-      showStatus('Saved!', 'success');
-      setTimeout(clearStatus, 2000);
-    })
-    .catch((error) => {
-      console.error('Save failed:', error);
-      showStatus(escapeHTML(error.message), 'error');
-    });
+    await saveConfiguration(config);
+    saved = true;
+    // Remove all stale optional host grants, including ones left by older builds.
+    await revokeUnusedWebhookPermissions(requestedOrigin);
+    showStatus('Saved. Use Test to verify your Home Assistant automation fires.', 'success');
+    setTimeout(clearStatus, 3500);
+  } catch (error) {
+    if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
+      try {
+        // Never leave a newly requested grant behind after a failed save.
+        await revokeUnusedWebhookPermissions(previousOrigin);
+      } catch (cleanupError) {
+        showStatus('Save failed: ' + error.message + '. Could not revoke temporary access: ' +
+          cleanupError.message, 'error');
+        saveBtn.disabled = false;
+        return;
+      }
+    }
+    showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
+      'Save failed: ' + error.message, 'error');
+  } finally {
+    saveBtn.disabled = false;
+  }
 }
 
 /**
  * Handle test button click
  */
-function handleTest() {
+async function handleTest() {
   const config = getFormConfiguration();
-  
-  // Validate configuration
   const validation = validateConfiguration(config);
   if (!validation.valid) {
     showStatus(validation.message, 'error');
     return;
   }
 
-  showStatus('Testing...', '');
+  testBtn.disabled = true;
+  let requestedOrigin = null;
+  let savedOrigin = null;
+  try {
+    // Request immediately in the click handler to preserve user activation.
+    requestedOrigin = await requestWebhookPermission(config);
+    const previous = await ExtensionUtils.getStorageConfig();
+    savedOrigin = configuredWebhookOrigin(previous);
 
-  // Perform test
-  performWebhookTest(config)
-    .then(() => {
-      showStatus('Test sent! (Check Home Assistant logs to confirm the webhook was triggered. Home Assistant always returns 200 even for invalid webhooks.)', 'success');
-    })
-    .catch((error) => {
-      console.error('Test failed:', error);
-      showStatus(escapeHTML(error.message), 'error');
-    });
+    showStatus('Sending test payload...', '');
+    await performWebhookTest(config);
+    showStatus('POST accepted. Confirm the automation triggered in Home Assistant; HTTP success alone is insufficient.',
+      'success');
+  } catch (error) {
+    showStatus('Test failed: ' + error.message, 'error');
+  } finally {
+    if (requestedOrigin) {
+      try {
+        // A test with unsaved settings must not retain its temporary site grant.
+        await revokeUnusedWebhookPermissions(savedOrigin);
+      } catch (error) {
+        showStatus('Test finished, but temporary site access could not be removed: ' + error.message, 'error');
+      }
+    }
+    testBtn.disabled = false;
+  }
 }
 
 /**
  * Handle clear config button click
  */
-function handleClearConfig() {
-  chrome.storage.sync.remove(['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'], () => {
-    // Clear form fields
+async function handleClearConfig() {
+  clearBtn.disabled = true;
+  try {
+    await Promise.all([
+      new Promise((resolve, reject) => chrome.storage.sync.remove(
+        ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'],
+        () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
+      )),
+      new Promise((resolve, reject) => chrome.storage.local.remove('webhookId',
+        () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
+      )),
+    ]);
+    // Also clean old grants that are not associated with the currently saved host.
+    await revokeUnusedWebhookPermissions(null);
     hostInput.value = '';
     sslToggle.checked = true;
     webhookIdInput.value = '';
@@ -235,10 +270,13 @@ function handleClearConfig() {
     if (deviceInput) {
       deviceInput.value = '';
     }
-    
-    showStatus('Config cleared!', 'success');
-    setTimeout(clearStatus, 2000);
-  });
+    updateSslWarning();
+    showStatus('Settings cleared and webhook site access removed.', 'success');
+  } catch (error) {
+    showStatus('Could not clear all settings or site access: ' + error.message, 'error');
+  } finally {
+    clearBtn.disabled = false;
+  }
 }
 
 // --- SSL Warning Management ---
@@ -268,15 +306,7 @@ function updateSslWarning() {
 function createSslWarningElement() {
   const warn = document.createElement('div');
   warn.id = 'sslWarn';
-  warn.style.cssText = `
-    color: #ffb347;
-    background: rgba(255,180,71,0.08);
-    border: 1px solid #ffb347;
-    border-radius: 8px;
-    padding: 0.7em 1em;
-    margin: 0.7em 0 1em 0;
-    font-size: 1em;
-  `;
+  warn.className = 'ssl-warning';
   
   warn.innerHTML = `
     <b>Warning:</b> You are not using SSL (https).<br>This is not secure!<br>
@@ -311,34 +341,17 @@ function getFormConfiguration() {
  * @returns {object} Validation result
  */
 function validateConfiguration(config) {
-  if (!config.host) {
-    return {
-      valid: false,
-      message: 'Please enter your Home Assistant hostname or IP.',
-    };
+  try {
+    ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId);
+  } catch (error) {
+    return { valid: false, message: error.message };
   }
-
-  if (!config.webhookId) {
-    return {
-      valid: false,
-      message: 'Please enter your Home Assistant webhook ID.',
-    };
+  if (config.device && !ExtensionUtils.validateDeviceName(config.device)) {
+    return { valid: false, message: 'Device name must contain up to 32 letters, numbers, spaces, dashes or underscores.' };
   }
-
-  if (config.device && !/^[\w\s-]{1,32}$/.test(config.device)) {
-    return {
-      valid: false,
-      message: 'Device name can only contain letters, numbers, spaces, dashes, and underscores (max 32 chars).',
-    };
+  if (!ExtensionUtils.validateUserName(config.user)) {
+    return { valid: false, message: 'User name must not exceed 32 characters.' };
   }
-
-  if (config.user && config.user.length > 32) {
-    return {
-      valid: false,
-      message: 'User name cannot exceed 32 characters.',
-    };
-  }
-
   return { valid: true };
 }
 
@@ -347,54 +360,62 @@ function validateConfiguration(config) {
  * @param {object} config - Configuration to save
  * @returns {Promise} Storage save promise
  */
-function saveConfiguration(config) {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set({
-      haHost: config.host,
-      ssl: config.ssl,
-      webhookId: config.webhookId,
-      userName: config.user,
-      deviceName: config.device,
-    }, resolve);
-  });
+async function saveConfiguration(config) {
+  const syncData = { haHost: config.host, ssl: config.ssl, userName: config.user, deviceName: config.device };
+  await new Promise((resolve, reject) => chrome.storage.local.set({ webhookId: config.webhookId },
+    () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
+  await new Promise((resolve, reject) => chrome.storage.sync.set(syncData,
+    () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
+  await new Promise((resolve, reject) => chrome.storage.sync.remove('webhookId',
+    () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve()));
 }
 
 // --- Webhook Testing ---
 
 /**
- * Test webhook accessibility (HEAD request)
+ * Request site access for the configured Home Assistant origin
  * @param {object} config - Configuration object
  * @returns {Promise} Test result promise
  */
-function testWebhookAccessibility(config) {
-  const url = `${config.ssl ? 'https' : 'http'}://${config.host}/api/webhook/${config.webhookId}`;
-  
-  return fetch(url, { method: 'HEAD', mode: 'cors' })
-    .then((response) => {
-      if (!response.ok) {
-        let message = `Webhook not reachable: HTTP ${response.status}`;
-        
-        if (response.status === 404) {
-          message += ' (Webhook not found. Check your ID and host.)';
-        } else if (response.status === 401 || response.status === 403) {
-          message += ' (Unauthorized. Check your Home Assistant token or permissions.)';
-        }
-        
-        throw new Error(message);
-      }
-      return response;
-    })
-    .catch((error) => {
-      if (error.message.includes('HTTP')) {
-        throw error; // Re-throw HTTP errors as-is
-      }
-      
-      let message = 'Could not reach the webhook URL. Please check your network or URL.';
-      if (error.message) {
-        message += ` (${escapeHTML(error.message)})`;
-      }
-      throw new Error(message);
-    });
+function configuredWebhookOrigin(config) {
+  if (!config || !config.haHost) {
+    return null;
+  }
+  try {
+    const endpoint = new URL(ExtensionUtils.createWebhookUrl(
+      config.haHost, config.ssl, config.webhookId || 'placeholder'));
+    return endpoint.protocol + '//' + endpoint.hostname + '/*';
+  } catch (_) {
+    return null;
+  }
+}
+
+async function revokeUnusedWebhookPermissions(keepOrigin) {
+  const granted = await chrome.permissions.getAll();
+  const required = new Set(chrome.runtime.getManifest().host_permissions || []);
+  const stale = (granted.origins || []).filter((origin) =>
+    (origin === '<all_urls>' || origin.startsWith('https://') || origin.startsWith('http://')) &&
+    !required.has(origin) && origin !== keepOrigin);
+  if (stale.length) {
+    const removed = await chrome.permissions.remove({ origins: stale });
+    if (!removed) {
+      throw new Error('The browser declined to remove obsolete host permissions.');
+    }
+  }
+}
+
+async function requestWebhookPermission(config) {
+  const origin = configuredWebhookOrigin({
+    haHost: config.host, ssl: config.ssl, webhookId: config.webhookId,
+  });
+  if (!origin) {
+    throw new Error('Invalid Home Assistant host.');
+  }
+  const granted = await chrome.permissions.request({ origins: [origin] });
+  if (!granted) {
+    throw new Error('Site access declined. Grant access to your Home Assistant host to send data.');
+  }
+  return origin;
 }
 
 /**
@@ -402,45 +423,9 @@ function testWebhookAccessibility(config) {
  * @param {object} config - Configuration object
  * @returns {Promise} Test result promise
  */
-function performWebhookTest(config) {
-  const url = `${config.ssl ? 'https' : 'http'}://${config.host}/api/webhook/${config.webhookId}`;
-  
-  const payload = createTestPayload(config);
-  
-  return fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-    .then((response) => {
-      if (!response.ok) {
-        return response.text().then((text) => {
-          let message = `Test failed: HTTP ${response.status}`;
-        
-          if (text) {
-            message += `: ${escapeHTML(text)}`;
-          } else if (response.status === 404) {
-            message += ' (Webhook not found. Check your ID and host.)';
-          } else if (response.status === 401 || response.status === 403) {
-            message += ' (Unauthorized. Check your Home Assistant token or permissions.)';
-          }
-        
-          throw new Error(message);
-        });
-      }
-      return response;
-    })
-    .catch((error) => {
-      if (error.message.includes('HTTP')) {
-        throw error; // Re-throw HTTP errors as-is
-      }
-    
-      let message = 'Test failed: Could not reach the webhook URL. Please check your network or URL.';
-      if (error.message) {
-        message += ` (${escapeHTML(error.message)})`;
-      }
-      throw new Error(message);
-    });
+async function performWebhookTest(config) {
+  const url = ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId);
+  return ExtensionUtils.sendToWebhook(url, createTestPayload(config));
 }
 
 /**
@@ -451,7 +436,7 @@ function performWebhookTest(config) {
 function createTestPayload(config) {
   const payload = {
     title: 'Test from extension',
-    url: window.location.origin,
+    url: 'https://example.com/',
     favicon: 'https://raw.githubusercontent.com/JOHLC/Send-to-Home-Assistant/refs/heads/main/package/icon-256.png',
     selected: 'Sample selected text',
     timestamp: new Date().toISOString(),
@@ -488,16 +473,3 @@ function clearStatus() {
   statusDiv.className = 'status';
 }
 
-/**
- * Escape HTML to prevent XSS
- * @param {string} str - String to escape
- * @returns {string} Escaped string
- */
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}

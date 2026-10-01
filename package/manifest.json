@@ -3,8 +3,16 @@
   "name": "Send to Home Assistant",
   "version": "2025.09.2",
   "description": "Send the current page URL and title to your Home Assistant webhook.",
-  "permissions": ["storage", "scripting", "activeTab", "contextMenus", "notifications"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab",
+    "contextMenus",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -26,9 +34,14 @@
     "128": "icon-256.png"
   },
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: http:;"
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'none'; style-src 'self'; img-src 'self' data: https: http:; connect-src 'self' https: http:;"
   },
   "homepage_url": "https://github.com/JOHLC/Send-to-Home-Assistant",
   "short_name": "Send to HA",
-  "author": "@JOHLC"
+  "author": "@JOHLC",
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "minimum_chrome_version": "116"
 }

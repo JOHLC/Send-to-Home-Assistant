@@ -37,8 +37,8 @@ This extension processes sensitive information:
 
 - **XSS Prevention:** Data is sanitized before display ([test page](/tests/xss-test.html))
 - **Data Transmission:** Data is sent only to your configured Home Assistant instance
-- **Storage Security:** Configurations are stored securely in the browser
-- **Permissions:** Extension requests only the minimum required permissions
+- **Storage Security:** Webhook IDs use extension-local browser storage; non-secret settings may sync. An older synced webhook ID is migrated on first load. Local extension storage is not a hardware-backed secret vault.
+- **Permissions:** The configured Home Assistant origin is requested at runtime. GitHub release-check access is declared separately; update checks are opt-in.
 
 ## Response Timeline
 
@@ -65,9 +65,9 @@ We support responsible disclosure. No legal action will be taken against researc
 ## Privacy
 
 - No personal data is collected
-- No data sent to third parties
-- Data sent only to your configured Home Assistant webhook
-- Configuration is stored locally in secure browser storage
+- Page data is POSTed to the configured Home Assistant webhook when manually sent.
+- Optional update checks contact GitHub; the public GitHub-hosted icon may be fetched by notification clients.
+- Webhook ID is stored locally; other non-secret preferences may sync.
 
 See the [Privacy Notice](README.md) for details.
 

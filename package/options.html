@@ -5,9 +5,6 @@
   <meta charset="utf-8">
   <title>Send to Home Assistant - Options</title>
   <link rel="stylesheet" href="style.css">
-  <style>
-    /* Remove all style rules here except for any page-specific overrides if needed */
-  </style>
 </head>
 <body>
   <div class="card">
@@ -23,7 +20,7 @@
   <label for="sslToggle"><input type="checkbox" id="sslToggle" checked> Use SSL (https)</label>
   <div class="webhook-row">
   <label for="webhookId"><a href="https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger" target="_blank" rel="noopener noreferrer" class="link-blue">Webhook ID</a></label> 
-    <input type="text" id="webhookId" placeholder="xxxxxx-xxxxxxxxxxxx">
+    <input type="password" id="webhookId" autocomplete="off" spellcheck="false" placeholder="xxxxxx-xxxxxxxxxxxx">
   </div>
   <label for="userName">User <span class="label-note">(optional)</span></label>
   <input type="text" id="userName" placeholder="Your name (optional)" maxlength="32">
@@ -36,16 +33,16 @@
   <button id="clearConfig" class="copy-btn clear-btn">Clear Config</button>
     </div>
 
-  <div class="status" id="status"></div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
   
     <div class="privacy">
       <b>Privacy Notice:</b><br>
-      <b>All data is sent only to your configured Home Assistant webhook</b> and is never sent to any third party or external server. No data is collected or stored by the extension author.
+      <b>Page data is sent only to the Home Assistant webhook you configure</b>. Optional update checks contact GitHub. Your webhook ID is stored locally on this browser, not synchronized.
     </div>
     <div id="updateStatus"></div>
     <div class="update-toggle-row">
       <label for="updateCheckToggle" class="update-toggle-label">
-        <input type="checkbox" id="updateCheckToggle" checked>
+        <input type="checkbox" id="updateCheckToggle">
         Check for extension updates automatically
       </label>
     </div>
