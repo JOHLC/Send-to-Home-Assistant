@@ -1,80 +1,215 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Send to Home Assistant - Options</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings | Send to Home Assistant</title>
+  <link rel="stylesheet" href="options.css">
 </head>
-<body>
-  <div class="card">
-  <div class="icon"><img src="icon-256.png" width="36" height="36" alt="HA"></div>
-  <h2>Send to Home Assistant</h2>
-  <div class="desc">  
-  <span class="options-title">Instructions</span>
-  <p>Enter your Home Assistant hostname or IP, choose SSL if your server uses https, and paste your <b>Webhook ID</b> (not the full URL).</p>
-  <p>Optionally, you can specify a User and/or device name so that you can specify who and what the message is from.</p>
-  <span class="options-title">Options</span>
-  <label for="haHost">Home Assistant Hostname or IP</label>
-  <input type="text" id="haHost" placeholder="myhome.duckdns.org or 192.168.1.2">
-  <label for="sslToggle"><input type="checkbox" id="sslToggle" checked> Use SSL (https)</label>
-  <div class="webhook-row">
-  <label for="webhookId"><a href="https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger" target="_blank" rel="noopener noreferrer" class="link-blue">Webhook ID</a></label> 
-    <input type="password" id="webhookId" autocomplete="off" spellcheck="false" placeholder="xxxxxx-xxxxxxxxxxxx">
-  </div>
-  <label for="userName">User <span class="label-note">(optional)</span></label>
-  <input type="text" id="userName" placeholder="Your name (optional)" maxlength="32">
-  <label for="deviceName">Device Name <span class="label-note">(optional, for identifying this device)</span></label>
-  <input type="text" id="deviceName" placeholder="e.g. Work Laptop" maxlength="32">
+<body class="options-page">
+  <div class="settings-shell">
+    <header class="settings-header">
+      <img class="app-mark" src="icon-256.png" width="52" height="52" alt="">
+      <div class="header-copy">
+        <p class="eyebrow">EXTENSION SETTINGS</p>
+        <h1>Send to Home Assistant</h1>
+        <p class="header-description">Choose where links go and what happens when you send them.</p>
+      </div>
+      <span class="version" id="extVersion"></span>
+    </header>
 
-    <div class="btn-row">
-      <button id="test" class="copy-btn">Test</button>
-      <button id="save" class="copy-btn">Save</button>
-  <button id="clearConfig" class="copy-btn clear-btn">Clear Config</button>
-    </div>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="Settings sections">
+        <a href="#connection">Connection</a>
+        <a href="#profiles">Send profiles</a>
+        <a href="#preferences">Preferences</a>
+        <div class="nav-help">
+          <span>Need help?</span>
+          <a href="https://github.com/JOHLC/Send-to-Home-Assistant#configuration"
+             target="_blank" rel="noopener noreferrer">Setup guide ↗</a>
+        </div>
+      </nav>
 
-  <section class="profiles-panel" aria-labelledby="profilesHeading">
-    <h3 id="profilesHeading">Send profiles</h3>
-    <p>All profiles use your configured webhook. The context field selects an action in your Home Assistant automation.</p>
-    <label for="defaultProfile">Default send profile</label>
-    <select id="defaultProfile" class="profile-select">
-      <option value="default">Default</option>
-    </select>
-    <label class="profile-checkbox" for="quickSendDefault">
-      <input type="checkbox" id="quickSendDefault">
-      Automatically send the default when the popup opens
-    </label>
-    <p class="profile-hint">Leave this off to select a different profile before sending. Right-click profiles always send directly.</p>
-    <div id="profilesList" class="profiles-list" aria-label="Custom profiles"></div>
-    <form id="profileAddForm" class="profile-add-form">
-      <h4>Add a profile</h4>
-      <label for="newProfileName">Display name</label>
-      <input type="text" id="newProfileName" maxlength="40" required placeholder="e.g. Download video">
-      <label for="newProfileContext">Context sent to Home Assistant</label>
-      <input type="text" id="newProfileContext" maxlength="64" required
-        pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="e.g. YTDL" spellcheck="false">
-      <button class="copy-btn" type="submit">Add profile</button>
-    </form>
-    <div class="status" id="profileStatus" role="status" aria-live="polite"></div>
-  </section>
-  <div class="status" id="status" role="status" aria-live="polite"></div>
-  
-    <div class="privacy">
-      <b>Privacy Notice:</b><br>
-      <b>Page data is sent only to the Home Assistant webhook you configure</b>. Optional update checks contact GitHub. Your webhook ID is stored locally on this browser, not synchronized.
-    </div>
-    <div id="updateStatus"></div>
-    <div class="update-toggle-row">
-      <label for="updateCheckToggle" class="update-toggle-label">
-        <input type="checkbox" id="updateCheckToggle">
-        Check for extension updates automatically
-      </label>
-    </div>
-    <div class="footer-row">
-      <a href="https://github.com/JOHLC/Send-to-Home-Assistant" target="_blank" rel="noopener noreferrer" class="link-blue">
-        View on GitHub
-      </a>
-      <div id="extVersion" class="ext-version"></div>
+      <main class="settings-main">
+        <section class="settings-section" id="connection" aria-labelledby="connectionTitle">
+          <div class="section-heading">
+            <div>
+              <span class="section-number">01 / CONNECTION</span>
+              <h2 id="connectionTitle">Connect Home Assistant</h2>
+              <p>All sends use this webhook, regardless of the profile you choose.</p>
+            </div>
+            <span class="connection-state" id="connectionState" role="status" aria-live="polite">Checking settings…</span>
+          </div>
+
+          <div class="settings-card">
+            <div class="field">
+              <label for="haHost">Home Assistant address</label>
+              <p class="field-help" id="hostHelp">Hostname or IP address, with an optional port. Don't include https:// or a path.</p>
+              <input id="haHost" type="text" placeholder="home.example.com or 192.168.1.10:8123"
+                     autocomplete="url" spellcheck="false" aria-describedby="hostHelp">
+            </div>
+
+            <label class="check-row" for="sslToggle">
+              <input id="sslToggle" type="checkbox" checked>
+              <span>
+                <strong>Use HTTPS</strong>
+                <small>Recommended, especially outside your home network.</small>
+              </span>
+            </label>
+            <div class="inline-warning hidden" id="sslWarn" role="note">
+              <strong>Unencrypted connection</strong>
+              <p>HTTP exposes webhook data on the network. Use it only on a trusted network.
+                <a href="https://www.home-assistant.io/docs/configuration/securing/#remote-access"
+                   target="_blank" rel="noopener noreferrer">Secure remote access ↗</a>
+              </p>
+            </div>
+
+            <div class="field">
+              <div class="label-line">
+                <label for="webhookId">Webhook ID</label>
+                <a class="subtle-link" href="https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger"
+                   target="_blank" rel="noopener noreferrer">Where to find it ↗</a>
+              </div>
+              <p class="field-help" id="webhookHelp">Paste only the ID from your Home Assistant webhook trigger, not the complete URL.</p>
+              <div class="secret-field">
+                <input id="webhookId" type="password" autocomplete="off" spellcheck="false"
+                       placeholder="Your webhook ID" aria-describedby="webhookHelp">
+                <button id="toggleWebhookId" type="button" class="field-button"
+                        aria-label="Show webhook ID" aria-pressed="false">Show</button>
+              </div>
+              <p class="field-footnote">Stored locally on this browser, not synced to other devices.</p>
+            </div>
+
+            <details class="settings-details" id="identitySettings">
+              <summary>Sender information <span>Optional</span></summary>
+              <p class="field-help">Include your name and device in the data Home Assistant receives.</p>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="userName">Sender name</label>
+                  <input id="userName" type="text" maxlength="32" placeholder="e.g. Joel">
+                </div>
+                <div class="field">
+                  <label for="deviceName">Device name</label>
+                  <input id="deviceName" type="text" maxlength="32" placeholder="e.g. Desktop">
+                </div>
+              </div>
+            </details>
+
+            <div class="action-bar">
+              <button class="button button-primary" id="save" type="button">Save connection</button>
+              <button class="button button-secondary" id="test" type="button">Send test</button>
+            </div>
+            <p class="action-note">Send test sends sample data to the fields above, even if you haven't saved them. It can trigger your automation and phone notifications.</p>
+            <div class="status hidden" id="status" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="settings-section" id="profiles" aria-labelledby="profilesHeading">
+          <div class="section-heading">
+            <div>
+              <span class="section-number">02 / SEND PROFILES</span>
+              <h2 id="profilesHeading">Choose what a send does</h2>
+              <p>Use one webhook for different Home Assistant actions, such as sending to your phone or downloading a video.</p>
+            </div>
+            <span class="section-count" id="profileCount">Loading…</span>
+          </div>
+
+          <div class="settings-card">
+            <div class="field">
+              <label for="defaultProfile">Default profile</label>
+              <p class="field-help">Preselected in the popup and marked as default in the right-click menu.</p>
+              <select id="defaultProfile" disabled>
+                <option value="default">Default</option>
+              </select>
+            </div>
+
+            <div class="subsection-heading">
+              <h3>Your profiles</h3>
+              <span>Changes here save automatically</span>
+            </div>
+            <div id="profilesList" class="profiles-list" aria-label="Send profiles"></div>
+
+            <form id="profileAddForm" class="add-profile-form">
+              <h3>Add another profile</h3>
+              <p class="field-help">For example, name it <strong>Download video</strong> and set its automation context to <code>YTDL</code>.</p>
+              <div class="field-grid">
+                <div class="field">
+                  <label for="newProfileName">Profile name</label>
+                  <input id="newProfileName" type="text" maxlength="40" required
+                         placeholder="Download video" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label for="newProfileContext">Automation context</label>
+                  <input id="newProfileContext" type="text" maxlength="64" required
+                         pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="YTDL"
+                         spellcheck="false" autocomplete="off">
+                </div>
+              </div>
+              <button class="button button-secondary" type="submit" disabled>Add profile</button>
+            </form>
+            <div class="status hidden" id="profileStatus" role="status" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="settings-section" id="preferences" aria-labelledby="preferencesHeading">
+          <div class="section-heading">
+            <div>
+              <span class="section-number">03 / PREFERENCES</span>
+              <h2 id="preferencesHeading">How the extension behaves</h2>
+              <p>These options don't change the webhook or your existing automations.</p>
+            </div>
+          </div>
+          <div class="settings-card">
+            <div class="preference">
+              <label class="check-row" for="quickSendDefault">
+                <input id="quickSendDefault" type="checkbox">
+                <span>
+                  <strong>Send immediately when I open the popup</strong>
+                  <small>Uses your default profile. Leave off to choose a profile and click Send first.</small>
+                </span>
+              </label>
+            </div>
+            <div class="preference">
+              <label class="check-row" for="updateCheckToggle">
+                <input id="updateCheckToggle" type="checkbox">
+                <span>
+                  <strong>Check GitHub for updates</strong>
+                  <small>Optional. When enabled, the extension checks for a new release approximately once a day.</small>
+                </span>
+              </label>
+              <div id="updateStatus" class="update-status hidden" role="status" aria-live="polite"></div>
+            </div>
+
+            <details class="settings-details advanced-settings">
+              <summary>Privacy and advanced settings</summary>
+              <div class="privacy-copy">
+                Page information is sent only when you send it, or when you enable immediate sending.
+                Profiles and non-secret settings may sync through your browser. Your webhook ID stays on this device.
+                <a href="https://github.com/JOHLC/Send-to-Home-Assistant" target="_blank"
+                   rel="noopener noreferrer">Project on GitHub ↗</a>
+              </div>
+              <div class="danger-zone">
+                <h3>Reset extension settings</h3>
+                <p>Removes your connection, webhook ID, profiles, and Home Assistant site access on this browser. This doesn't change your Home Assistant automations.</p>
+                <button class="button button-danger-outline" id="clearConfig" type="button">Reset settings…</button>
+                <div class="reset-confirm hidden" id="resetConfirmation">
+                  <p><strong>Reset all extension settings?</strong> You can't undo this.</p>
+                  <div class="reset-actions">
+                    <button class="button button-danger" id="confirmClearConfig" type="button">Yes, reset settings</button>
+                    <button class="button button-secondary" id="cancelClearConfig" type="button">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <footer class="settings-footer">
+          <span>Send to Home Assistant</span>
+          <a href="https://github.com/JOHLC/Send-to-Home-Assistant/issues" target="_blank"
+             rel="noopener noreferrer">Report an issue ↗</a>
+        </footer>
+      </main>
     </div>
   </div>
   <script src="profiles.js"></script>
@@ -83,4 +218,3 @@
   <script src="profile-options.js"></script>
 </body>
 </html>
-
