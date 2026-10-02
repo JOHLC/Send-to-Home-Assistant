@@ -127,6 +127,14 @@ a:hover { color: #c2e9ff; }
   padding: 25px;
   box-shadow: 0 5px 25px rgba(0,0,0,.13);
 }
+.connection-address-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 16px;
+  align-items: end;
+}
+.connection-address-grid > .field { min-width: 0; }
+.connection-address-grid .field-help { min-height: 39px; }
 .field { min-width: 0; margin-bottom: 19px; }
 .field > label, .label-line label { display: block; font-weight: 670; margin: 0 0 5px; }
 .field-help, .field-footnote {
@@ -280,6 +288,8 @@ select { padding-right: 32px; }
   .settings-section { margin-bottom: 34px; }
   .settings-card { padding: 17px; }
   .field-grid { grid-template-columns: minmax(0,1fr); }
+  .connection-address-grid { grid-template-columns: minmax(0,1fr); gap: 0; }
+  .connection-address-grid .field-help { min-height: 0; }
   .profile-list-row { align-items: flex-start; flex-wrap: wrap; }
   .profile-row-actions { width: 100%; }
   .subsection-heading { display: block; }
