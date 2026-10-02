@@ -47,11 +47,12 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
 
   const elements = new Map();
   for (const id of ['haHost', 'sslToggle', 'webhookId', 'userName', 'deviceName',
-    'status', 'save', 'test', 'clearConfig']) {
+    'status', 'save', 'test', 'clearConfig', 'haPort']) {
     elements.set(id, { value: '', checked: true, disabled: false, className: '', textContent: '',
       addEventListener() {} });
   }
   elements.get('haHost').value = formHost;
+  elements.get('haPort').value = '443';
   elements.get('webhookId').value = 'secret';
   elements.get('sslToggle').checked = true;
 
@@ -98,6 +99,7 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     sync, local, granted, removed, requested, requests,
     previousOrigin, newOrigin, permanent,
     statusElement: elements.get('status'),
+    elements, context,
   };
 }
 
@@ -168,4 +170,68 @@ test('webhook input CSS rules close before their sibling layout declarations', (
     assert.ok(depth >= 0, 'Unexpected CSS closing brace');
   }
   assert.equal(depth, 0, 'Unclosed CSS block');
+});
+
+test('new HTTPS configurations default to 443 and do not require an explicit port', async() => {
+  const h = harness();
+  const config = h.context.getFormConfiguration();
+  assert.equal(config.hostname, 'new.example.test');
+  assert.equal(config.port, '443');
+  assert.equal(config.host, 'new.example.test');
+  await h.save();
+  assert.equal(h.sync.haHost, 'new.example.test');
+  await h.tryHost();
+  assert.equal(h.requests[0].url, 'https://new.example.test/api/webhook/secret');
+});
+
+test('switching from HTTPS to HTTP updates the default port to 80', () => {
+  const h = harness();
+  h.elements.get('sslToggle').checked = false;
+  h.context.onSslChanged();
+  assert.equal(h.elements.get('haPort').value, '80');
+  const config = h.context.getFormConfiguration();
+  assert.equal(config.host, 'new.example.test');
+  assert.equal(h.context.validateConfiguration(config).valid, true);
+  h.elements.get('sslToggle').checked = true;
+  h.context.onSslChanged();
+  assert.equal(h.elements.get('haPort').value, '443');
+});
+
+test('custom ports survive protocol changes and save in the existing host:port format', async() => {
+  const h = harness();
+  h.elements.get('haPort').value = '8123';
+  h.elements.get('sslToggle').checked = false;
+  h.context.onSslChanged();
+  assert.equal(h.elements.get('haPort').value, '8123');
+  h.elements.get('sslToggle').checked = true;
+  h.context.onSslChanged();
+  assert.equal(h.context.getFormConfiguration().host, 'new.example.test:8123');
+  await h.save();
+  assert.equal(h.sync.haHost, 'new.example.test:8123');
+});
+
+test('legacy host:port values migrate into the separate Port field without changing the target', () => {
+  const h = harness();
+  assert.deepEqual({ ...h.context.splitStoredAddress('legacy.example.test:8123', true) },
+    { hostname: 'legacy.example.test', port: '8123' });
+  assert.deepEqual({ ...h.context.splitStoredAddress('legacy.example.test', true) },
+    { hostname: 'legacy.example.test', port: '443' });
+  assert.deepEqual({ ...h.context.splitStoredAddress('legacy.example.test', false) },
+    { hostname: 'legacy.example.test', port: '80' });
+  assert.deepEqual({ ...h.context.splitStoredAddress('[::1]:8123', true) },
+    { hostname: '[::1]', port: '8123' });
+});
+
+test('invalid ports and embedded host:port values are rejected', async() => {
+  const h = harness();
+  for (const value of ['0', '65536', '-1', 'abc', '443.5', '']) {
+    h.elements.get('haPort').value = value;
+    assert.equal(h.context.validateConfiguration(h.context.getFormConfiguration()).valid,
+      false, 'Unexpectedly accepted port ' + value);
+  }
+  h.elements.get('haPort').value = '443';
+  h.elements.get('haHost').value = 'new.example.test:8123';
+  assert.equal(h.context.validateConfiguration(h.context.getFormConfiguration()).valid, false);
+  await h.save();
+  assert.equal(h.sync.haHost, 'old.example.test', 'Invalid form must not overwrite saved host');
 });

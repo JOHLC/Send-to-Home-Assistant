@@ -9,37 +9,37 @@ const { validateReleaseTag } = require('../scripts/validate-release');
 const manifest = require('../package/manifest.json');
 const packageJson = require('../package.json');
 
-test('the current Beta3 release tag matches the Chrome-safe version and display name', () => {
-  assert.deepEqual(validateReleaseTag('2026.10.2-Beta3', manifest, packageJson),
-    { baseVersion: '2026.10.2', releaseName: '2026.10.2-Beta3' });
-  assert.equal(manifest.version_name, '2026.10.2-Beta3');
+test('the current Beta4 release tag matches the Chrome-safe version and display name', () => {
+  assert.deepEqual(validateReleaseTag('2026.10.3-Beta4', manifest, packageJson),
+    { baseVersion: '2026.10.3', releaseName: '2026.10.3-Beta4' });
+  assert.equal(manifest.version_name, '2026.10.3-Beta4');
 });
 
 test('a leading v is accepted without affecting the display name', () => {
-  assert.deepEqual(validateReleaseTag('v2026.10.2-Beta3', manifest, packageJson),
-    { baseVersion: '2026.10.2', releaseName: '2026.10.2-Beta3' });
+  assert.deepEqual(validateReleaseTag('v2026.10.3-Beta4', manifest, packageJson),
+    { baseVersion: '2026.10.3', releaseName: '2026.10.3-Beta4' });
 });
 
 test('outdated manifest or package.json versions fail instead of bypassing validation', () => {
-  assert.throws(() => validateReleaseTag('2026.10.2-Beta3',
+  assert.throws(() => validateReleaseTag('2026.10.3-Beta4',
     { ...manifest, version: '2025.09.2' }, packageJson), /requires manifest version/);
-  assert.throws(() => validateReleaseTag('2026.10.2-Beta3', manifest,
+  assert.throws(() => validateReleaseTag('2026.10.3-Beta4', manifest,
     { ...packageJson, version: '2025.09.2' }), /package.json version/);
 });
 
-test('release stage must match version_name, including Beta3 vs Beta4', () => {
-  assert.throws(() => validateReleaseTag('2026.10.2-Beta4', manifest, packageJson),
+test('release stage must match version_name, including Beta4 vs Beta5', () => {
+  assert.throws(() => validateReleaseTag('2026.10.3-Beta5', manifest, packageJson),
     /version_name/);
-  assert.throws(() => validateReleaseTag('2026.10.2', manifest, packageJson),
+  assert.throws(() => validateReleaseTag('2026.10.3', manifest, packageJson),
     /Stable tag/);
-  assert.deepEqual(validateReleaseTag('2026.10.2',
+  assert.deepEqual(validateReleaseTag('2026.10.3',
     { ...manifest, version_name: undefined }, packageJson),
-  { baseVersion: '2026.10.2', releaseName: '2026.10.2' });
+  { baseVersion: '2026.10.3', releaseName: '2026.10.3' });
 });
 
 test('rejects malformed and unsafe release tags and unsupported Chrome version parts', () => {
-  for (const tag of ['', '2026.10.2/Beta2', '../../etc', '2026.10.2-Beta3/../bad',
-    '2026.10.2-Beta3;echo unsafe']) {
+  for (const tag of ['', '2026.10.3/Beta2', '../../etc', '2026.10.3-Beta4/../bad',
+    '2026.10.3-Beta4;echo unsafe']) {
     assert.throws(() => validateReleaseTag(tag, manifest, packageJson));
   }
   assert.throws(() => validateReleaseTag('99999.10.1-Beta2',

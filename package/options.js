@@ -13,6 +13,7 @@
 
 // --- DOM Elements ---
 const hostInput = document.getElementById('haHost');
+const portInput = document.getElementById('haPort');
 const sslToggle = document.getElementById('sslToggle');
 const webhookIdInput = document.getElementById('webhookId');
 const userInput = document.getElementById('userName');
@@ -21,6 +22,48 @@ const statusDiv = document.getElementById('status');
 const saveBtn = document.getElementById('save');
 const testBtn = document.getElementById('test');
 const clearBtn = document.getElementById('clearConfig');
+const connectionState = document.getElementById('connectionState');
+const webhookVisibilityBtn = document.getElementById('toggleWebhookId');
+const identitySettings = document.getElementById('identitySettings');
+const resetConfirmation = document.getElementById('resetConfirmation');
+const confirmResetBtn = document.getElementById('confirmClearConfig');
+const cancelResetBtn = document.getElementById('cancelClearConfig');
+let connectionDirty = false;
+let savedUpdateCheckEnabled = false;
+
+/**
+ * Retain legacy hostname:port settings without changing the stored format used
+ * by the popup and background worker. Unspecified ports use the protocol default.
+ */
+function splitStoredAddress(address, ssl) {
+  const value = typeof address === 'string' ? address.trim() : '';
+  const match = /^(.*):([0-9]{1,5})$/.exec(value);
+  return match ?
+    { hostname: match[1], port: match[2] } :
+    { hostname: value, port: ssl ? '443' : '80' };
+}
+
+function defaultPort(ssl) {
+  return ssl ? '443' : '80';
+}
+
+function onSslChanged() {
+  const previousDefault = defaultPort(!sslToggle.checked);
+  if (portInput.value.trim() === previousDefault) {
+    portInput.value = defaultPort(sslToggle.checked);
+  }
+  updateSslWarning();
+}
+
+
+function setConnectionState(message, state = '') {
+  if (!connectionState) {
+    return;
+  }
+  connectionState.textContent = message;
+  connectionState.dataset.state = state;
+}
+
 
 // --- Initialization ---
 
@@ -51,35 +94,64 @@ function initializeVersionDisplay() {
 /**
  * Initialize update checking functionality
  */
+function showUpdatePreferenceMessage(message, type) {
+  const feedback = document.getElementById('updatePreferenceStatus');
+  if (!feedback) {
+    return;
+  }
+  feedback.textContent = message;
+  feedback.className = type ? 'status ' + type : 'status';
+}
+
 function initializeUpdateChecking() {
   const updateDiv = document.getElementById('updateStatus');
   const updateCheckToggle = document.getElementById('updateCheckToggle');
-  
-  if (!updateCheckToggle || !chrome.storage || !chrome.storage.local) {
+
+  if (!updateCheckToggle || !chrome.storage?.local) {
     return;
   }
-
-  // Load update check preference
+  updateCheckToggle.disabled = true;
   chrome.storage.local.get('updateCheckEnabled', (data) => {
-    updateCheckToggle.checked = typeof data.updateCheckEnabled === 'boolean' 
-      ? data.updateCheckEnabled 
-      : false; // opt-in
-  });
-
-  // Handle toggle changes
-  updateCheckToggle.addEventListener('change', () => {
-    chrome.storage.local.set({ updateCheckEnabled: updateCheckToggle.checked }, () => {
-      chrome.runtime.sendMessage({ type: 'update-preference-changed' }).catch(console.warn);
-    });
-    
-    // Show/hide update status based on toggle
-    if (updateDiv) {
-      updateDiv.classList.toggle('hidden', !updateCheckToggle.checked);
+    if (chrome.runtime.lastError) {
+      showUpdatePreferenceMessage('Could not load update preference: ' +
+        chrome.runtime.lastError.message, 'error');
+      return;
     }
+    savedUpdateCheckEnabled = data.updateCheckEnabled === true;
+    updateCheckToggle.checked = savedUpdateCheckEnabled;
+    updateCheckToggle.disabled = false;
+    displayUpdateStatus(updateDiv);
   });
 
-  // Display current update status
-  displayUpdateStatus(updateDiv);
+  updateCheckToggle.addEventListener('change', () => {
+    const enabled = updateCheckToggle.checked;
+    updateCheckToggle.disabled = true;
+    chrome.storage.local.set({ updateCheckEnabled: enabled }, () => {
+      const storageError = chrome.runtime.lastError?.message;
+      updateCheckToggle.disabled = false;
+      if (storageError) {
+        updateCheckToggle.checked = savedUpdateCheckEnabled;
+        showUpdatePreferenceMessage('Could not save update preference: ' + storageError, 'error');
+        if (updateDiv) {
+          updateDiv.classList.toggle('hidden', !savedUpdateCheckEnabled);
+        }
+        return;
+      }
+
+      savedUpdateCheckEnabled = enabled;
+      showUpdatePreferenceMessage(enabled ? 'Automatic update checks enabled.' :
+        'Automatic update checks disabled.', 'success');
+      displayUpdateStatus(updateDiv);
+      // Storage is authoritative. A temporarily unavailable background worker
+      // should not make a successfully saved preference appear to have failed.
+      try {
+        Promise.resolve(chrome.runtime.sendMessage({ type: 'update-preference-changed' }))
+          .catch((error) => console.warn('Update schedule will refresh on startup:', error));
+      } catch (error) {
+        console.warn('Update schedule will refresh on startup:', error);
+      }
+    });
+  });
 }
 
 /**
@@ -129,15 +201,26 @@ function displayUpdateStatus(updateDiv) {
  */
 function loadSavedConfiguration() {
   ExtensionUtils.getStorageConfig().then((result) => {
-    hostInput.value = result.haHost || '';
+    const address = splitStoredAddress(result.haHost, result.ssl);
+    hostInput.value = address.hostname;
     sslToggle.checked = result.ssl;
+    portInput.value = address.port;
     webhookIdInput.value = result.webhookId || '';
     userInput.value = result.userName || '';
     if (deviceInput) {
       deviceInput.value = result.deviceName || '';
     }
     updateSslWarning();
-  }).catch((error) => showStatus(error.message, 'error'));
+    connectionDirty = false;
+    setConnectionState(result.haHost && result.webhookId ? 'Saved' : 'Not configured',
+      result.haHost && result.webhookId ? 'saved' : '');
+    if (identitySettings && (result.userName || result.deviceName)) {
+      identitySettings.open = true;
+    }
+  }).catch((error) => {
+    setConnectionState('Could not load settings', 'unsaved');
+    showStatus(error.message, 'error');
+  });
 }
 
 /**
@@ -145,7 +228,7 @@ function loadSavedConfiguration() {
  */
 function setupEventListeners() {
   // SSL toggle change handler
-  sslToggle.addEventListener('change', updateSslWarning);
+  sslToggle.addEventListener('change', onSslChanged);
   
   // Save button handler
   saveBtn.addEventListener('click', handleSave);
@@ -153,9 +236,48 @@ function setupEventListeners() {
   // Test button handler
   testBtn.addEventListener('click', handleTest);
   
-  // Clear config button handler
-  if (clearBtn) {
-    clearBtn.addEventListener('click', handleClearConfig);
+  // Display unsaved state for connection fields only. Profiles and preferences
+  // save independently and display their own feedback.
+  for (const field of [hostInput, portInput, sslToggle, webhookIdInput, userInput, deviceInput]) {
+    if (!field) {
+      continue;
+    }
+    field.addEventListener('input', () => {
+      connectionDirty = true;
+      setConnectionState('Unsaved changes', 'unsaved');
+      clearStatus();
+    });
+    field.addEventListener('change', () => {
+      connectionDirty = true;
+      setConnectionState('Unsaved changes', 'unsaved');
+      clearStatus();
+    });
+  }
+
+  if (webhookVisibilityBtn) {
+    webhookVisibilityBtn.addEventListener('click', () => {
+      const show = webhookIdInput.type === 'password';
+      webhookIdInput.type = show ? 'text' : 'password';
+      webhookVisibilityBtn.textContent = show ? 'Hide' : 'Show';
+      webhookVisibilityBtn.setAttribute('aria-label', (show ? 'Hide' : 'Show') + ' webhook ID');
+      webhookVisibilityBtn.setAttribute('aria-pressed', String(show));
+    });
+  }
+
+  if (clearBtn && resetConfirmation) {
+    clearBtn.addEventListener('click', () => {
+      resetConfirmation.classList.remove('hidden');
+      clearBtn.disabled = true;
+    });
+    cancelResetBtn.addEventListener('click', () => {
+      resetConfirmation.classList.add('hidden');
+      clearBtn.disabled = false;
+    });
+    confirmResetBtn.addEventListener('click', async() => {
+      await handleClearConfig();
+      resetConfirmation.classList.add('hidden');
+      clearBtn.disabled = false;
+    });
   }
 }
 
@@ -186,8 +308,9 @@ async function handleSave() {
     saved = true;
     // Remove all stale optional host grants, including ones left by older builds.
     await revokeUnusedWebhookPermissions(requestedOrigin);
-    showStatus('Saved. Use Test to verify your Home Assistant automation fires.', 'success');
-    setTimeout(clearStatus, 3500);
+    connectionDirty = false;
+    setConnectionState('Saved', 'saved');
+    showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
   } catch (error) {
     if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
       try {
@@ -200,6 +323,7 @@ async function handleSave() {
         return;
       }
     }
+    setConnectionState(saved ? 'Saved · permissions need attention' : 'Unsaved changes', 'unsaved');
     showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
       'Save failed: ' + error.message, 'error');
   } finally {
@@ -229,7 +353,10 @@ async function handleTest() {
 
     showStatus('Sending test payload...', '');
     await performWebhookTest(config);
-    showStatus('POST accepted. Confirm the automation triggered in Home Assistant; HTTP success alone is insufficient.',
+    if (!connectionDirty) {
+      setConnectionState('Test accepted', 'saved');
+    }
+    showStatus('Test POST accepted. Check your Home Assistant automation trace; HTTP success does not confirm it ran.',
       'success');
   } catch (error) {
     showStatus('Test failed: ' + error.message, 'error');
@@ -257,7 +384,8 @@ async function handleClearConfig() {
         ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'sendProfiles', 'defaultProfileId', 'quickSendDefault'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
-      new Promise((resolve, reject) => chrome.storage.local.remove('webhookId',
+      new Promise((resolve, reject) => chrome.storage.local.remove(
+        ['webhookId', 'updateCheckEnabled', 'updateInfo', 'lastUpdateCheck'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
     ]);
@@ -265,13 +393,37 @@ async function handleClearConfig() {
     await revokeUnusedWebhookPermissions(null);
     hostInput.value = '';
     sslToggle.checked = true;
+    portInput.value = '443';
     webhookIdInput.value = '';
     userInput.value = '';
     if (deviceInput) {
       deviceInput.value = '';
     }
     updateSslWarning();
-    showStatus('Settings cleared and webhook site access removed.', 'success');
+    const updateToggle = document.getElementById('updateCheckToggle');
+    savedUpdateCheckEnabled = false;
+    if (updateToggle) {
+      updateToggle.checked = false;
+      updateToggle.disabled = false;
+    }
+    const updatePreferenceStatus = document.getElementById('updatePreferenceStatus');
+    if (updatePreferenceStatus) {
+      updatePreferenceStatus.textContent = '';
+      updatePreferenceStatus.className = 'status hidden';
+    }
+    const updateStatus = document.getElementById('updateStatus');
+    if (updateStatus) {
+      updateStatus.replaceChildren();
+      updateStatus.classList.add('hidden');
+    }
+    connectionDirty = false;
+    setConnectionState('Not configured');
+    // Prompt the profile editor to refresh immediately, independent of delayed
+    // storage.onChanged notifications from other extension contexts.
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('send-ha-settings-reset'));
+    }
+    showStatus('Connection, profiles and update preferences cleared; webhook access revoked.', 'success');
   } catch (error) {
     showStatus('Could not clear all settings or site access: ' + error.message, 'error');
   } finally {
@@ -285,38 +437,10 @@ async function handleClearConfig() {
  * Update SSL warning display based on SSL toggle state
  */
 function updateSslWarning() {
-  let warn = document.getElementById('sslWarn');
-  
-  if (!sslToggle.checked) {
-    // Show warning if SSL is disabled
-    if (!warn) {
-      warn = createSslWarningElement();
-      sslToggle.parentNode.parentNode.insertBefore(warn, sslToggle.parentNode.nextSibling);
-    }
-  } else if (warn) {
-    // Remove warning if SSL is enabled
-    warn.remove();
+  const warn = document.getElementById('sslWarn');
+  if (warn) {
+    warn.classList.toggle('hidden', sslToggle.checked);
   }
-}
-
-/**
- * Create SSL warning element
- * @returns {HTMLElement} Warning element
- */
-function createSslWarningElement() {
-  const warn = document.createElement('div');
-  warn.id = 'sslWarn';
-  warn.className = 'ssl-warning';
-  
-  warn.innerHTML = `
-    <b>Warning:</b> You are not using SSL (https).<br>This is not secure!<br>
-    <br>Without SSL encryption, you are effectively broadcasting any data sent to this webhook to anyone who wants it.<br><br>
-    It is not that hard to set up and should REALLY be configured, especially if you are accessing your Home Assistant remotely. <br>
-    See <a href="https://www.home-assistant.io/docs/configuration/securing/#remote-access" target="_blank" class="link-warn">Remote Access Security</a> and 
-    <a href="https://www.home-assistant.io/integrations/http/#ssl_certificate" target="_blank" class="link-warn">SSL Certificate Setup</a> for help on setting that up.
-  `;
-  
-  return warn;
 }
 
 // --- Form and Configuration Management ---
@@ -326,9 +450,16 @@ function createSslWarningElement() {
  * @returns {object} Configuration object
  */
 function getFormConfiguration() {
+  const hostname = hostInput.value.trim();
+  const port = portInput.value.trim();
+  const ssl = sslToggle.checked;
+  const normalizedPort = /^[0-9]{1,5}$/.test(port) ? String(Number(port)) : port;
   return {
-    host: hostInput.value.trim(),
-    ssl: sslToggle.checked,
+    hostname,
+    port,
+    host: hostname + (normalizedPort && normalizedPort !== defaultPort(ssl) ?
+      ':' + normalizedPort : ''),
+    ssl,
     webhookId: webhookIdInput.value.trim(),
     user: userInput.value.trim(),
     device: deviceInput ? deviceInput.value.trim() : '',
@@ -341,6 +472,13 @@ function getFormConfiguration() {
  * @returns {object} Validation result
  */
 function validateConfiguration(config) {
+  if (!/^(?:[A-Za-z0-9.-]+|\[[A-Fa-f0-9:]+\])$/.test(config.hostname)) {
+    return { valid: false, message: 'Enter a hostname or IP address without a port or URL path.' };
+  }
+  if (!/^[0-9]{1,5}$/.test(config.port) ||
+      Number(config.port) < 1 || Number(config.port) > 65535) {
+    return { valid: false, message: 'Port must be a number between 1 and 65535.' };
+  }
   try {
     ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId);
   } catch (error) {
@@ -470,6 +608,6 @@ function showStatus(message, type) {
  */
 function clearStatus() {
   statusDiv.textContent = '';
-  statusDiv.className = 'status';
+  statusDiv.className = 'status hidden';
 }
 

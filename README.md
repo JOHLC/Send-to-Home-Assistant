@@ -64,8 +64,10 @@ This all started because I wanted to be able to send the current web page from m
 **Extension Popup**  
 <img width="500" alt="Extension Popup" src="https://github.com/user-attachments/assets/cf206055-5074-4684-8928-5854d33fd38c" />
 
-**Options Page**  
-<img width="500" alt="Options Page" src="https://github.com/user-attachments/assets/39065165-36f8-41c2-9b55-f570135f8e22" />
+**Options Page**
+
+The Options page has been redesigned for Beta4, with separate Connection, Send profiles
+and Preferences sections. See [Configuration](#configuration) for current setup details.
 
 **HTML Notification**  
 <img width="455" alt="HTML Notification" src="https://github.com/user-attachments/assets/7d7fac2d-dfd6-463b-94f8-8a169f9cab9f" />
@@ -88,12 +90,28 @@ This all started because I wanted to be able to send the current web page from m
 
 ## Configuration
 
+Settings are organized into **Connection**, **Send profiles**, and **Preferences**.
+Connection changes need **Save connection**. Choosing a default profile or
+switching a preference saves immediately; creating or editing a profile saves
+when you click **Add profile** or **Save changes**. No second connection save
+is needed for profile changes. **Send test** submits a sample POST using the fields
+currently shown, even if they have not been saved, and may trigger your Home
+Assistant automation. The webhook ID is stored locally in this browser.
+
 1. Open the extension options (popup gear icon or right-click → **Extension options**).
-2. Enter your Home Assistant hostname or IP (e.g., `myhome.duckdns.org` or `192.168.1.2`).
-3. Choose whether to use SSL (**strongly recommended**; you'll be warned if not enabled).
+2. Enter your Home Assistant hostname or IP (e.g., `myhome.duckdns.org` or `192.168.1.2`), without a protocol or port.
+3. HTTPS is enabled by default, with **port 443** preselected. Change the Port field for a nonstandard installation, such as 8123. Turning HTTPS off switches the default to port 80 but preserves custom port choices. Existing saved `hostname:port` settings appear in the separate Port field when upgrading.
 4. Enter your Home Assistant [Webhook ID](https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger) (just the ID, not the full URL).
 5. Optionally, add a username and device name to include in the payload.
 6. Click **Save** and approve access to your specific Home Assistant host. Then click **Test** to send a sample POST request. Confirm that the automation actually triggered in Home Assistant; an HTTP success alone does not verify it.
+
+**Profile configuration:** Choose your default in **Send profiles**. Add a
+custom profile using a display name such as `Download video` and the
+case-sensitive Home Assistant context `YTDL`. Existing profiles appear as
+compact rows; choose Edit to modify one. In **Preferences**, enable
+**Send immediately when I open the popup** only if you want to skip selecting a
+profile for ordinary sends. Advanced settings include update checking, privacy,
+and a confirmed reset.
 
 **Updating from a previous version:** Open Options and click Save once to grant the new scoped host permission. An existing synced webhook ID is migrated to local storage. On another browser or computer, you may need to enter the ID again after migration.
 
