@@ -77,7 +77,8 @@ test('update checks are advanced and have visible saved/error feedback', () => {
   assert.ok(advanced >= 0 && advanced < updateToggle &&
     updateToggle < updateFeedback && updateFeedback < detailsEnd,
   'Update toggle and its feedback must be inside the advanced disclosure');
-  assert.match(optionsScript, /chrome\.runtime\.lastError\?\.message/);
+  assert.match(optionsScript, /chrome\.runtime\.lastError/);
+  assert.match(optionsScript, /settingsCoordinator\.runWrite/);
   assert.match(optionsScript, /Could not save update preference/);
   assert.match(optionsScript, /Automatic update checks enabled/);
   assert.match(optionsScript, /Automatic update checks disabled/);
