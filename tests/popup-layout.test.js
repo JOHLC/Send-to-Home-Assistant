@@ -43,6 +43,6 @@ test('popup controls fill the panel without inheriting desktop card padding', ()
 
 test('full Options page remains separate from action popup sizing', () => {
   assert.doesNotMatch(options, /popup-document|popup-page/);
-  assert.match(options, /class="card"/);
+  assert.match(options, /class="settings-card"/);
   assert.doesNotMatch(popup, /style="/);
 });
