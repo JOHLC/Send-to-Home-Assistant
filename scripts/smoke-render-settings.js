@@ -475,10 +475,13 @@ async function main() {
         .classList.contains('hidden'),
       state: document.getElementById('connectionState').textContent,
       storedWebhook: window.__testStorage.local.webhookId,
+      localError: document.getElementById('resetStatus').textContent,
     }))()`);
     assert.deepEqual(failedResetState, {
       confirmationVisible: true, state: 'Reset incomplete',
       storedWebhook: 'sample-webhook-id',
+      localError: 'Reset incomplete: Simulated reset storage failure. ' +
+        'Some settings may already be cleared. Retry or cancel and check your settings.',
     }, 'A failed reset must leave retry controls visible and report partial state');
     await waitFor(send, `!document.getElementById('confirmClearConfig').disabled`,
       'reset retry button');
