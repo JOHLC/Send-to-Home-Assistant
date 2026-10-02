@@ -403,9 +403,11 @@ async function main() {
     await waitFor(send, "document.getElementById('connectionState').textContent === 'Test accepted'",
       'test POST');
     const sent = await evaluate(send, "window.__testPosts");
-    assert.equal(sent.length, 1, 'Test should send exactly one sample payload');
-    assert.equal(sent[0].method, 'POST', 'Test must use POST');
-    assert.match(sent[0].url, /^https:\/\/new\.example\.test:8123\/api\/webhook\//,
+    assert.equal(sent.length, beforeDuplicate.requests + 1,
+      'The later Test should add exactly one POST after the concurrency test');
+    const latestTest = sent.at(-1);
+    assert.equal(latestTest.method, 'POST', 'Test must use POST');
+    assert.match(latestTest.url, /^https:\/\/new\.example\.test:8123\/api\/webhook\//,
       'Test must retain the previously configured custom port');
 
     // An edit during an in-flight write must remain unsaved after the earlier
