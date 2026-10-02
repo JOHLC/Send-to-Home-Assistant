@@ -114,6 +114,9 @@ function stubExtension() {
   const local = { webhookId: 'sample-webhook-id', updateCheckEnabled: false };
   window.__testStorage = { sync, local };
   window.__failUpdateSave = false;
+  window.__failResetStorage = false;
+  window.__holdConnectionSave = false;
+  window.__heldConnectionSave = null;
   const area = (data, areaName) => ({
     get(keys, callback) {
       const names = Array.isArray(keys) ? keys : [keys];
@@ -121,6 +124,14 @@ function stubExtension() {
         .map((name) => [name, data[name]])));
     },
     set(values, callback) {
+      if (areaName === 'sync' && Object.hasOwn(values, 'haHost') &&
+          window.__holdConnectionSave) {
+        window.__heldConnectionSave = () => {
+          Object.assign(data, values);
+          callback?.();
+        };
+        return;
+      }
       if (areaName === 'local' && Object.hasOwn(values, 'updateCheckEnabled') &&
           window.__failUpdateSave) {
         window.chrome.runtime.lastError = { message: 'Simulated storage failure' };
@@ -132,7 +143,15 @@ function stubExtension() {
       callback?.();
     },
     remove(keys, callback) {
-      for (const name of Array.isArray(keys) ? keys : [keys]) {
+      const names = Array.isArray(keys) ? keys : [keys];
+      if (areaName === 'local' && names.includes('webhookId') &&
+          window.__failResetStorage) {
+        window.chrome.runtime.lastError = { message: 'Simulated reset storage failure' };
+        callback?.();
+        window.chrome.runtime.lastError = null;
+        return;
+      }
+      for (const name of names) {
         delete data[name];
       }
       callback?.();
@@ -336,15 +355,57 @@ async function main() {
     assert.match(sent[0].url, /^https:\/\/new\.example\.test:8123\/api\/webhook\//,
       'Test must retain the previously configured custom port');
 
+    // An edit during an in-flight write must remain unsaved after the earlier
+    // captured configuration finishes persisting.
+    await evaluate(send, `(() => {
+      window.__holdConnectionSave = true;
+      const host = document.getElementById('haHost');
+      host.value = 'earlier.example.test';
+      host.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('save').click();
+    })()`);
+    await waitFor(send, 'typeof window.__heldConnectionSave === "function"',
+      'blocked connection write');
+    await evaluate(send, `(() => {
+      const host = document.getElementById('haHost');
+      host.value = 'latest.example.test';
+      host.dispatchEvent(new Event('input', { bubbles: true }));
+      window.__holdConnectionSave = false;
+      window.__heldConnectionSave();
+    })()`);
+    await waitFor(send, `document.getElementById('status').textContent
+      .includes('newer changes are still unsaved')`, 'save race detection');
+    const raceState = await evaluate(send, `(() => ({
+      displayed: document.getElementById('haHost').value,
+      persisted: window.__testStorage.sync.haHost,
+      status: document.getElementById('connectionState').textContent,
+      saveEnabled: !document.getElementById('save').disabled,
+    }))()`);
+    assert.deepEqual(raceState, {
+      displayed: 'latest.example.test',
+      persisted: 'earlier.example.test:8123',
+      status: 'Unsaved changes',
+      saveEnabled: true,
+    }, 'In-flight save must preserve newer unsaved form edits');
+    await evaluate(send, "document.getElementById('save').click()");
+    await waitFor(send, `document.getElementById('connectionState').textContent === 'Saved'`,
+      'saving latest form changes');
+
     await evaluate(send, `(() => {
       document.querySelectorAll('#profilesList .profile-list-row')[1]
         .querySelector('.profile-row-actions button').click();
+      const name = document.querySelector('.profile-edit-form input[id^="name-"]');
       const context = document.querySelector('.profile-edit-form input[id^="context-"]');
+      name.value = '  Saved videos  ';
       context.value = 'Save';
       context.form.requestSubmit();
     })()`);
     await waitFor(send, `document.querySelectorAll('#profilesList .profile-context')[1]
       ?.textContent === 'Save'`, 'profile edit');
+    const renameMessage = await evaluate(send,
+      "document.getElementById('profileStatus').textContent");
+    assert.equal(renameMessage, 'Updated Saved videos.',
+      'Profile rename feedback must display the new normalized name');
     await evaluate(send, `(() => {
       const select = document.getElementById('defaultProfile');
       select.value = 'p_12345678';
@@ -401,12 +462,32 @@ async function main() {
     })()`);
     assert.ok(resetConfirmation.shown && resetConfirmation.cancelled,
       'Reset must require confirmation and support cancellation');
+    // A failed reset must not dismiss its confirmation or imply completion.
     await evaluate(send, `(() => {
+      window.__failResetStorage = true;
       document.getElementById('clearConfig').click();
       document.getElementById('confirmClearConfig').click();
     })()`);
+    await waitFor(send, `document.getElementById('status').textContent
+      .includes('Simulated reset storage failure')`, 'failed reset feedback');
+    const failedResetState = await evaluate(send, `(() => ({
+      confirmationVisible: !document.getElementById('resetConfirmation')
+        .classList.contains('hidden'),
+      state: document.getElementById('connectionState').textContent,
+      storedWebhook: window.__testStorage.local.webhookId,
+    }))()`);
+    assert.deepEqual(failedResetState, {
+      confirmationVisible: true, state: 'Reset incomplete',
+      storedWebhook: 'sample-webhook-id',
+    }, 'A failed reset must leave retry controls visible and report partial state');
+    await waitFor(send, `!document.getElementById('confirmClearConfig').disabled`,
+      'reset retry button');
+    await evaluate(send, `(() => {
+      window.__failResetStorage = false;
+      document.getElementById('confirmClearConfig').click();
+    })()`);
     await waitFor(send, `document.getElementById('connectionState').textContent ===
-      'Not configured'`, 'confirmed reset');
+      'Not configured'`, 'confirmed reset retry');
     await waitFor(send, `document.querySelectorAll('#profilesList .profile-list-row').length === 1`,
       'profile list after reset');
     const resetState = await evaluate(send, `(() => ({
@@ -418,11 +499,15 @@ async function main() {
       savedHost: window.__testStorage.sync.haHost || '',
       savedWebhook: window.__testStorage.local.webhookId || '',
       savedUpdates: window.__testStorage.local.updateCheckEnabled === true,
+      webhookType: document.getElementById('webhookId').type,
+      revealText: document.getElementById('toggleWebhookId').textContent,
+      revealPressed: document.getElementById('toggleWebhookId').getAttribute('aria-pressed'),
     }))()`);
     assert.deepEqual(resetState, {
       host: '', webhook: '', port: '443', updates: false, profiles: 1,
       savedHost: '', savedWebhook: '', savedUpdates: false,
-    }, 'Confirmed reset did not clear connection, profiles and preferences');
+      webhookType: 'password', revealText: 'Show', revealPressed: 'false',
+    }, 'Confirmed reset must clear storage and re-mask the webhook input');
     console.log('Options interactions: reveal, dirty/save/test, profile edit, preferences and reset confirmation passed.');
 
     await send('Emulation.setDeviceMetricsOverride', {
