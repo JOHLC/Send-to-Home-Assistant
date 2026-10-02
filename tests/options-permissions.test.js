@@ -76,7 +76,8 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
   const elements = new Map();
   for (const id of ['haHost', 'sslToggle', 'webhookId', 'userName', 'deviceName',
     'status', 'save', 'test', 'clearConfig', 'haPort', 'connectionState',
-    'toggleWebhookId', 'resetConfirmation', 'confirmClearConfig', 'cancelClearConfig']) {
+    'toggleWebhookId', 'resetConfirmation', 'confirmClearConfig', 'cancelClearConfig',
+    'resetStatus']) {
     const classes = new Set(id === 'resetConfirmation' ? ['hidden'] : []);
     const attributes = {};
     elements.set(id, {
@@ -310,6 +311,7 @@ test('failed reset reports incomplete state, leaves stored secret and allows ret
   assert.equal(h.local.webhookId, 'secret');
   assert.equal(h.elements.get('connectionState').textContent, 'Reset incomplete');
   assert.match(h.statusElement.textContent, /Some settings may already be cleared/);
+  assert.match(h.elements.get('resetStatus').textContent, /Retry or cancel/);
   h.setResetFailures();
   const second = await h.clear();
   assert.equal(second, true);
