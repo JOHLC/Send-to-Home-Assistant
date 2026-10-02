@@ -43,7 +43,7 @@ function initializeVersionDisplay() {
   if (versionDiv && chrome.runtime && chrome.runtime.getManifest) {
     const manifest = chrome.runtime.getManifest();
     if (manifest && manifest.version) {
-      versionDiv.textContent = `Version: v${manifest.version}`;
+      versionDiv.textContent = `Version: v${manifest.version_name || manifest.version}`;
     }
   }
 }
