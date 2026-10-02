@@ -21,6 +21,22 @@ const statusDiv = document.getElementById('status');
 const saveBtn = document.getElementById('save');
 const testBtn = document.getElementById('test');
 const clearBtn = document.getElementById('clearConfig');
+const connectionState = document.getElementById('connectionState');
+const webhookVisibilityBtn = document.getElementById('toggleWebhookId');
+const identitySettings = document.getElementById('identitySettings');
+const resetConfirmation = document.getElementById('resetConfirmation');
+const confirmResetBtn = document.getElementById('confirmClearConfig');
+const cancelResetBtn = document.getElementById('cancelClearConfig');
+let connectionDirty = false;
+
+function setConnectionState(message, state = '') {
+  if (!connectionState) {
+    return;
+  }
+  connectionState.textContent = message;
+  connectionState.dataset.state = state;
+}
+
 
 // --- Initialization ---
 
@@ -137,7 +153,16 @@ function loadSavedConfiguration() {
       deviceInput.value = result.deviceName || '';
     }
     updateSslWarning();
-  }).catch((error) => showStatus(error.message, 'error'));
+    connectionDirty = false;
+    setConnectionState(result.haHost && result.webhookId ? 'Saved · not tested' : 'Not configured',
+      result.haHost && result.webhookId ? 'saved' : '');
+    if (identitySettings && (result.userName || result.deviceName)) {
+      identitySettings.open = true;
+    }
+  }).catch((error) => {
+    setConnectionState('Could not load settings', 'unsaved');
+    showStatus(error.message, 'error');
+  });
 }
 
 /**
@@ -153,9 +178,48 @@ function setupEventListeners() {
   // Test button handler
   testBtn.addEventListener('click', handleTest);
   
-  // Clear config button handler
-  if (clearBtn) {
-    clearBtn.addEventListener('click', handleClearConfig);
+  // Display unsaved state for connection fields only. Profiles and preferences
+  // save independently and display their own feedback.
+  for (const field of [hostInput, sslToggle, webhookIdInput, userInput, deviceInput]) {
+    if (!field) {
+      continue;
+    }
+    field.addEventListener('input', () => {
+      connectionDirty = true;
+      setConnectionState('Unsaved changes', 'unsaved');
+      clearStatus();
+    });
+    field.addEventListener('change', () => {
+      connectionDirty = true;
+      setConnectionState('Unsaved changes', 'unsaved');
+      clearStatus();
+    });
+  }
+
+  if (webhookVisibilityBtn) {
+    webhookVisibilityBtn.addEventListener('click', () => {
+      const show = webhookIdInput.type === 'password';
+      webhookIdInput.type = show ? 'text' : 'password';
+      webhookVisibilityBtn.textContent = show ? 'Hide' : 'Show';
+      webhookVisibilityBtn.setAttribute('aria-label', (show ? 'Hide' : 'Show') + ' webhook ID');
+      webhookVisibilityBtn.setAttribute('aria-pressed', String(show));
+    });
+  }
+
+  if (clearBtn && resetConfirmation) {
+    clearBtn.addEventListener('click', () => {
+      resetConfirmation.classList.remove('hidden');
+      clearBtn.disabled = true;
+    });
+    cancelResetBtn.addEventListener('click', () => {
+      resetConfirmation.classList.add('hidden');
+      clearBtn.disabled = false;
+    });
+    confirmResetBtn.addEventListener('click', async() => {
+      await handleClearConfig();
+      resetConfirmation.classList.add('hidden');
+      clearBtn.disabled = false;
+    });
   }
 }
 
@@ -186,8 +250,9 @@ async function handleSave() {
     saved = true;
     // Remove all stale optional host grants, including ones left by older builds.
     await revokeUnusedWebhookPermissions(requestedOrigin);
-    showStatus('Saved. Use Test to verify your Home Assistant automation fires.', 'success');
-    setTimeout(clearStatus, 3500);
+    connectionDirty = false;
+    setConnectionState('Saved · not tested', 'saved');
+    showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
   } catch (error) {
     if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
       try {
@@ -200,6 +265,7 @@ async function handleSave() {
         return;
       }
     }
+    setConnectionState(saved ? 'Saved · permissions need attention' : 'Unsaved changes', 'unsaved');
     showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
       'Save failed: ' + error.message, 'error');
   } finally {
@@ -229,7 +295,10 @@ async function handleTest() {
 
     showStatus('Sending test payload...', '');
     await performWebhookTest(config);
-    showStatus('POST accepted. Confirm the automation triggered in Home Assistant; HTTP success alone is insufficient.',
+    if (!connectionDirty) {
+      setConnectionState('Test accepted', 'saved');
+    }
+    showStatus('Test POST accepted. Check your Home Assistant automation trace; HTTP success does not confirm it ran.',
       'success');
   } catch (error) {
     showStatus('Test failed: ' + error.message, 'error');
@@ -257,7 +326,8 @@ async function handleClearConfig() {
         ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'sendProfiles', 'defaultProfileId', 'quickSendDefault'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
-      new Promise((resolve, reject) => chrome.storage.local.remove('webhookId',
+      new Promise((resolve, reject) => chrome.storage.local.remove(
+        ['webhookId', 'updateCheckEnabled', 'updateInfo', 'lastUpdateCheck'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
     ]);
@@ -271,7 +341,18 @@ async function handleClearConfig() {
       deviceInput.value = '';
     }
     updateSslWarning();
-    showStatus('Settings cleared and webhook site access removed.', 'success');
+    const updateToggle = document.getElementById('updateCheckToggle');
+    if (updateToggle) {
+      updateToggle.checked = false;
+    }
+    const updateStatus = document.getElementById('updateStatus');
+    if (updateStatus) {
+      updateStatus.replaceChildren();
+      updateStatus.classList.add('hidden');
+    }
+    connectionDirty = false;
+    setConnectionState('Not configured');
+    showStatus('Connection, profiles and update preferences cleared; webhook access revoked.', 'success');
   } catch (error) {
     showStatus('Could not clear all settings or site access: ' + error.message, 'error');
   } finally {
@@ -285,38 +366,10 @@ async function handleClearConfig() {
  * Update SSL warning display based on SSL toggle state
  */
 function updateSslWarning() {
-  let warn = document.getElementById('sslWarn');
-  
-  if (!sslToggle.checked) {
-    // Show warning if SSL is disabled
-    if (!warn) {
-      warn = createSslWarningElement();
-      sslToggle.parentNode.parentNode.insertBefore(warn, sslToggle.parentNode.nextSibling);
-    }
-  } else if (warn) {
-    // Remove warning if SSL is enabled
-    warn.remove();
+  const warn = document.getElementById('sslWarn');
+  if (warn) {
+    warn.classList.toggle('hidden', sslToggle.checked);
   }
-}
-
-/**
- * Create SSL warning element
- * @returns {HTMLElement} Warning element
- */
-function createSslWarningElement() {
-  const warn = document.createElement('div');
-  warn.id = 'sslWarn';
-  warn.className = 'ssl-warning';
-  
-  warn.innerHTML = `
-    <b>Warning:</b> You are not using SSL (https).<br>This is not secure!<br>
-    <br>Without SSL encryption, you are effectively broadcasting any data sent to this webhook to anyone who wants it.<br><br>
-    It is not that hard to set up and should REALLY be configured, especially if you are accessing your Home Assistant remotely. <br>
-    See <a href="https://www.home-assistant.io/docs/configuration/securing/#remote-access" target="_blank" class="link-warn">Remote Access Security</a> and 
-    <a href="https://www.home-assistant.io/integrations/http/#ssl_certificate" target="_blank" class="link-warn">SSL Certificate Setup</a> for help on setting that up.
-  `;
-  
-  return warn;
 }
 
 // --- Form and Configuration Management ---
@@ -470,6 +523,6 @@ function showStatus(message, type) {
  */
 function clearStatus() {
   statusDiv.textContent = '';
-  statusDiv.className = 'status';
+  statusDiv.className = 'status hidden';
 }
 
