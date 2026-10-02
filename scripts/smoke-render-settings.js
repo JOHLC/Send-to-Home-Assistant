@@ -276,6 +276,10 @@ async function main() {
       const select = document.getElementById('defaultProfile');
       select.value = 'p_12345678';
       select.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitFor(send, `document.querySelectorAll('#profilesList .profile-list-row')[1]
+      ?.textContent.includes('Default')`, 'default profile selection');
+    await evaluate(send, `(() => {
       const quick = document.getElementById('quickSendDefault');
       quick.checked = true;
       quick.dispatchEvent(new Event('change', { bubbles: true }));
