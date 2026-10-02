@@ -36,6 +36,8 @@ let resetInProgress = false;
 // Invalidates any asynchronous initial read when a newer form action occurs.
 let formRevision = 0;
 let savedUpdateCheckEnabled = false;
+// A later status request wins even when an earlier read resolves out of order.
+let updateStatusRequestId = 0;
 
 // All writes initiated by the Options page participate in Reset. Register
 // each profile/preference write before its first async boundary, block new
@@ -168,7 +170,7 @@ function initializeUpdateChecking() {
       savedUpdateCheckEnabled = data.updateCheckEnabled === true;
       updateCheckToggle.checked = savedUpdateCheckEnabled;
       updateCheckToggle.disabled = false;
-      displayUpdateStatus(updateDiv);
+      displayUpdateStatus(updateDiv, revision);
     });
   }
 
@@ -226,11 +228,20 @@ function initializeUpdateChecking() {
  * Display update status information
  * @param {HTMLElement} updateDiv - Update status container element
  */
-function displayUpdateStatus(updateDiv) {
-  if (!updateDiv || !chrome.storage?.local) {
+function displayUpdateStatus(updateDiv, revision = settingsCoordinator.revision) {
+  if (!updateDiv || !chrome.storage?.local ||
+      settingsCoordinator.resetActive || revision !== settingsCoordinator.revision) {
     return;
   }
+  const requestId = ++updateStatusRequestId;
   chrome.storage.local.get(['updateInfo', 'updateCheckEnabled'], (data) => {
+    // This is a SECOND storage read after the guarded preference read. It can
+    // complete after Reset or a newer status request and must not redraw stale
+    // update information or re-enable a status that Reset just cleared.
+    if (revision !== settingsCoordinator.revision || settingsCoordinator.resetActive ||
+        requestId !== updateStatusRequestId) {
+      return;
+    }
     const info = data.updateInfo;
     const enabled = data.updateCheckEnabled === true;
     updateDiv.classList.toggle('hidden', !enabled);
