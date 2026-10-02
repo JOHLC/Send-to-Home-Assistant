@@ -68,3 +68,27 @@ test('options have a separate responsive stylesheet and package includes it', ()
   }
   assert.equal(braces, 0, 'Unclosed options.css rule');
 });
+
+test('update checks are advanced and have visible saved/error feedback', () => {
+  const advanced = options.indexOf('<details class="settings-details advanced-settings">');
+  const updateToggle = options.indexOf('id="updateCheckToggle"');
+  const updateFeedback = options.indexOf('id="updatePreferenceStatus"');
+  const detailsEnd = options.indexOf('</details>', advanced);
+  assert.ok(advanced >= 0 && advanced < updateToggle &&
+    updateToggle < updateFeedback && updateFeedback < detailsEnd,
+  'Update toggle and its feedback must be inside the advanced disclosure');
+  assert.match(optionsScript, /chrome\.runtime\.lastError\?\.message/);
+  assert.match(optionsScript, /Could not save update preference/);
+  assert.match(optionsScript, /Automatic update checks enabled/);
+  assert.match(optionsScript, /Automatic update checks disabled/);
+});
+
+test('browser smoke test confirms reset and popup sends, not just popup dimensions', () => {
+  const smoke = fs.readFileSync(path.join(__dirname, '../scripts/smoke-render-settings.js'), 'utf8');
+  assert.match(smoke, /confirmClearConfig/);
+  assert.match(smoke, /Not configured/);
+  assert.match(smoke, /profiles: 1/);
+  assert.match(smoke, /Simulated storage failure/);
+  assert.match(smoke, /quick-send popup success/);
+  assert.match(smoke, /context: 'Default'/);
+});
