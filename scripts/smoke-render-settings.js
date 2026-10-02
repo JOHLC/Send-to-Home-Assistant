@@ -112,6 +112,10 @@ function stubExtension() {
     sendProfiles: [{ id: 'p_12345678', name: 'Download video', context: 'YTDL' }],
   };
   const local = { webhookId: 'sample-webhook-id', updateCheckEnabled: false };
+  if (window.location.search.includes('legacy')) {
+    sync.webhookId = 'legacy-synchronized-secret';
+    delete local.webhookId;
+  }
   window.__testStorage = { sync, local };
   window.__failUpdateSave = false;
   window.__failResetStorage = false;
@@ -625,6 +629,67 @@ async function main() {
       persistedHost: 'newer.example.test', status: 'Saved',
     }, 'Late initial read must not replace saved connection data');
     console.log('Initial-load races: delayed reads cannot undo Save or Reset.');
+
+    // Exercise the actual legacy synchronized-secret path, not just a mocked
+    // promise. A stale read must never write an old secret after Reset.
+    await send('Page.navigate', {
+      url: pathToFileURL(path.join(root, 'package', 'options.html')).href +
+        '?holdInitial=legacy-reset',
+    });
+    await waitFor(send, `typeof window.__releaseInitialRead === 'function' &&
+      window.__testStorage.sync.webhookId === 'legacy-synchronized-secret'`,
+    'delayed legacy-sync read for Reset');
+    await evaluate(send, `(() => {
+      document.querySelector('.advanced-settings').open = true;
+      document.getElementById('clearConfig').click();
+      document.getElementById('confirmClearConfig').click();
+    })()`);
+    await waitFor(send, `document.getElementById('connectionState')
+      .textContent === 'Not configured'`, 'reset of legacy secret');
+    await evaluate(send, 'window.__releaseInitialRead()');
+    await sleep(70);
+    const legacyAfterReset = await evaluate(send, `(() => ({
+      syncSecret: window.__testStorage.sync.webhookId ?? null,
+      localSecret: window.__testStorage.local.webhookId ?? null,
+      input: document.getElementById('webhookId').value,
+      status: document.getElementById('connectionState').textContent,
+    }))()`);
+    assert.deepEqual(legacyAfterReset, {
+      syncSecret: null, localSecret: null, input: '', status: 'Not configured',
+    }, 'Delayed real legacy read must not resurrect a secret after Reset');
+
+    // Likewise, a read holding an old legacy ID cannot write over a newly
+    // saved local secret or restore its old value in the form.
+    await send('Page.navigate', {
+      url: pathToFileURL(path.join(root, 'package', 'options.html')).href +
+        '?holdInitial=legacy-save',
+    });
+    await waitFor(send, `typeof window.__releaseInitialRead === 'function' &&
+      window.__testStorage.sync.webhookId === 'legacy-synchronized-secret'`,
+    'delayed legacy-sync read for Save');
+    await evaluate(send, `(() => {
+      document.getElementById('haHost').value = 'newer.example.test';
+      document.getElementById('haPort').value = '443';
+      document.getElementById('webhookId').value = 'new-local-secret';
+      document.getElementById('haHost').dispatchEvent(
+        new Event('input', { bubbles: true }));
+      document.getElementById('save').click();
+    })()`);
+    await waitFor(send, `document.getElementById('connectionState')
+      .textContent === 'Saved'`, 'save replacement for legacy secret');
+    await evaluate(send, 'window.__releaseInitialRead()');
+    await sleep(70);
+    const legacyAfterSave = await evaluate(send, `(() => ({
+      syncSecret: window.__testStorage.sync.webhookId ?? null,
+      localSecret: window.__testStorage.local.webhookId ?? null,
+      input: document.getElementById('webhookId').value,
+      status: document.getElementById('connectionState').textContent,
+    }))()`);
+    assert.deepEqual(legacyAfterSave, {
+      syncSecret: null, localSecret: 'new-local-secret',
+      input: 'new-local-secret', status: 'Saved',
+    }, 'Delayed real legacy read must not overwrite a saved local secret');
+    console.log('Legacy migration races: deferred synchronized secrets cannot survive Reset or overwrite Save.');
 
     await send('Emulation.setDeviceMetricsOverride', {
       width: 400, height: 640, deviceScaleFactor: 1, mobile: false,
