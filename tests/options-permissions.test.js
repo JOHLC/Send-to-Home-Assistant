@@ -11,7 +11,13 @@ const utilsSource = fs.readFileSync(path.join(__dirname, '../package/utils.js'),
 
 function harness({ savedHost = 'old.example.test', formHost = 'new.example.test',
   existingGrants = [], status = 200, failSave = false, blockSave = false,
-  failResetLocal = false, failResetSync = false, failRevoke = false, blockTest = false } = {}) {
+  failResetLocal = false, failResetSync = false, failRevoke = false,
+  blockTest = false, blockResetLocal = false } = {}) {
+  let releaseResetLocal;
+  let resetLocalReached;
+  let holdResetLocal = blockResetLocal;
+  const resetLocalStarted = blockResetLocal ?
+    new Promise((resolve) => { resetLocalReached = resolve; }) : Promise.resolve();
   let releaseTest;
   let testReached;
   const testStarted = blockTest ? new Promise((resolve) => { testReached = resolve; }) :
@@ -63,6 +69,17 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     },
     remove(keys, callback) {
       const names = Array.isArray(keys) ? keys : [keys];
+      if (area === 'local' && holdResetLocal && names.includes('webhookId')) {
+        resetLocalReached();
+        releaseResetLocal = () => {
+          holdResetLocal = false;
+          for (const key of names) {
+            delete data[key];
+          }
+          callback();
+        };
+        return;
+      }
       const shouldFail = Array.isArray(keys) &&
         ((area === 'sync' && failSyncRemoval && names.includes('haHost')) ||
          (area === 'local' && failLocalRemoval && names.includes('webhookId')));
@@ -154,9 +171,10 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     sync, local, granted, removed, requested, requests,
     previousOrigin, newOrigin, permanent,
     statusElement: elements.get('status'),
-    elements, context, saveStarted, testStarted,
+    elements, context, saveStarted, testStarted, resetLocalStarted,
     releaseSave: () => releaseSave?.(),
     releaseTest: () => releaseTest?.(),
+    releaseResetLocal: () => releaseResetLocal?.(),
     setResetFailures({ local: localFailure = false, sync: syncFailure = false,
       permissions: permissionFailure = false } = {}) {
       failLocalRemoval = localFailure;
@@ -422,4 +440,24 @@ test('late initial read cannot replace the form after a completed Save', async()
   assert.equal(h.elements.get('haHost').value, 'new.example.test');
   assert.equal(h.elements.get('webhookId').value, 'secret');
   assert.equal(h.elements.get('connectionState').textContent, 'Saved');
+});
+
+test('reset waits for slow local removal after sync failure before unlocking Save', async() => {
+  const h = harness({ failResetSync: true, blockResetLocal: true });
+  const pendingReset = h.clear();
+  await h.resetLocalStarted;
+  assert.equal(h.elements.get('connectionState').textContent === 'Reset incomplete', false);
+  assert.equal(h.local.webhookId, 'secret', 'Local removal has not finished yet');
+  await h.save();
+  assert.equal(h.sync.haHost, 'old.example.test', 'Save must remain locked during pending reset');
+  assert.equal(await h.clear(), false, 'Concurrent reset must be rejected');
+  h.releaseResetLocal();
+  assert.equal(await pendingReset, false, 'Original sync failure is still reported');
+  assert.equal(h.local.webhookId, undefined, 'Late local removal must finish before reset resolves');
+  h.setResetFailures();
+  await h.save();
+  assert.equal(h.sync.haHost, 'new.example.test');
+  assert.equal(h.local.webhookId, 'secret', 'Newly saved secret survives the failed reset');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.local.webhookId, 'secret', 'No delayed removal may erase the new secret');
 });
