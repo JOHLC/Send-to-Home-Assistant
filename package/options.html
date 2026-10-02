@@ -42,11 +42,20 @@
           </div>
 
           <div class="settings-card">
-            <div class="field">
-              <label for="haHost">Home Assistant address</label>
-              <p class="field-help" id="hostHelp">Hostname or IP address, with an optional port. Don't include https:// or a path.</p>
-              <input id="haHost" type="text" placeholder="home.example.com or 192.168.1.10:8123"
-                     autocomplete="off" spellcheck="false" aria-describedby="hostHelp">
+            <div class="connection-address-grid">
+              <div class="field">
+                <label for="haHost">Home Assistant address</label>
+                <p class="field-help" id="hostHelp">Hostname or IP address, without a protocol, port or path.</p>
+                <input id="haHost" type="text" placeholder="home.example.com or 192.168.1.10"
+                       autocomplete="off" spellcheck="false" aria-describedby="hostHelp">
+              </div>
+              <div class="field">
+                <label for="haPort">Port</label>
+                <p class="field-help" id="portHelp">443 for HTTPS</p>
+                <input id="haPort" type="text" inputmode="numeric" pattern="[0-9]{1,5}"
+                       maxlength="5" value="443" placeholder="443" autocomplete="off"
+                       aria-describedby="portHelp">
+              </div>
             </div>
 
             <label class="check-row" for="sslToggle">
