@@ -175,7 +175,7 @@ async function screenshot(send, name) {
 async function checkLayout(send, width, mode) {
   const data = await evaluate(send, `(() => {
     const selectors = ['.settings-shell', '.header-copy', '#connection', '#profiles', '#preferences',
-      '#haHost', '#webhookId', '#defaultProfile', '#newProfileName',
+      '#haHost', '#haPort', '#webhookId', '#defaultProfile', '#newProfileName',
       '#newProfileContext', '#quickSendDefault'];
     const rects = selectors.map((selector) => {
       const element = document.querySelector(selector);
@@ -244,6 +244,39 @@ async function main() {
     await checkLayout(send, 390, 'Mobile');
     await screenshot(send, 'options-mobile');
 
+    // The existing host:8123 setting must migrate into the separate port field.
+    const migratedPort = await evaluate(send, `(() => ({
+      hostname: document.getElementById('haHost').value,
+      port: document.getElementById('haPort').value,
+      secure: document.getElementById('sslToggle').checked,
+    }))()`);
+    assert.deepEqual(migratedPort,
+      { hostname: 'home.example.test', port: '8123', secure: true },
+      'Legacy host:port should migrate without changing its destination');
+
+    const portSwitch = await evaluate(send, `(() => {
+      const ssl = document.getElementById('sslToggle');
+      const port = document.getElementById('haPort');
+      ssl.checked = false;
+      ssl.dispatchEvent(new Event('change', { bubbles: true }));
+      const customHttp = port.value;
+      ssl.checked = true;
+      ssl.dispatchEvent(new Event('change', { bubbles: true }));
+      port.value = '443';
+      ssl.checked = false;
+      ssl.dispatchEvent(new Event('change', { bubbles: true }));
+      const httpDefault = port.value;
+      ssl.checked = true;
+      ssl.dispatchEvent(new Event('change', { bubbles: true }));
+      const httpsDefault = port.value;
+      port.value = '8123';
+      port.dispatchEvent(new Event('input', { bubbles: true }));
+      return { customHttp, httpDefault, httpsDefault };
+    })()`);
+    assert.deepEqual(portSwitch,
+      { customHttp: '8123', httpDefault: '80', httpsDefault: '443' },
+      'Default ports must follow HTTPS/HTTP while preserving custom ports');
+
     // Exercise actual Options event handlers inside Chromium, without a network.
     const shownType = await evaluate(send, `(() => {
       document.getElementById('toggleWebhookId').click();
@@ -266,6 +299,8 @@ async function main() {
     const sent = await evaluate(send, "window.__testPosts");
     assert.equal(sent.length, 1, 'Test should send exactly one sample payload');
     assert.equal(sent[0].method, 'POST', 'Test must use POST');
+    assert.match(sent[0].url, /^https:\/\/new\.example\.test:8123\/api\/webhook\//,
+      'Test must retain the previously configured custom port');
 
     await evaluate(send, `(() => {
       document.querySelectorAll('#profilesList .profile-list-row')[1]
