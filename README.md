@@ -64,8 +64,10 @@ This all started because I wanted to be able to send the current web page from m
 **Extension Popup**  
 <img width="500" alt="Extension Popup" src="https://github.com/user-attachments/assets/cf206055-5074-4684-8928-5854d33fd38c" />
 
-**Options Page**  
-<img width="500" alt="Options Page" src="https://github.com/user-attachments/assets/39065165-36f8-41c2-9b55-f570135f8e22" />
+**Options Page**
+
+The Options page has been redesigned for Beta4, with separate Connection, Send profiles
+and Preferences sections. See [Configuration](#configuration) for current setup details.
 
 **HTML Notification**  
 <img width="455" alt="HTML Notification" src="https://github.com/user-attachments/assets/7d7fac2d-dfd6-463b-94f8-8a169f9cab9f" />
