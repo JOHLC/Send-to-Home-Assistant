@@ -335,6 +335,19 @@ async function main() {
     })()`);
     assert.ok(resetConfirmation.shown && resetConfirmation.cancelled,
       'Reset must require confirmation and support cancellation');
+    await evaluate(send, `(() => {
+      document.getElementById('clearConfig').click();
+      document.getElementById('confirmClearConfig').click();
+    })()`);
+    await waitFor(send, `document.getElementById('connectionState').textContent ===
+      'Not configured'`, 'confirmed reset');
+    const resetState = await evaluate(send, `(() => ({
+      host: document.getElementById('haHost').value,
+      webhook: document.getElementById('webhookId').value,
+      updates: document.getElementById('updateCheckToggle').checked,
+    }))()`);
+    assert.deepEqual(resetState, { host: '', webhook: '', updates: false },
+      'Confirmed reset did not clear the Options UI');
     console.log('Options interactions: reveal, dirty/save/test, profile edit, preferences and reset confirmation passed.');
 
     await send('Emulation.setDeviceMetricsOverride', {
