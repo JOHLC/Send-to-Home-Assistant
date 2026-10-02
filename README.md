@@ -88,12 +88,26 @@ This all started because I wanted to be able to send the current web page from m
 
 ## Configuration
 
+Settings are organized into **Connection**, **Send profiles**, and **Preferences**.
+Connection changes need **Save connection**; profile changes and preference toggles
+save as you make them. **Send test** submits a sample POST using the fields
+currently shown, even if they have not been saved, and may trigger your Home
+Assistant automation. The webhook ID is stored locally in this browser.
+
 1. Open the extension options (popup gear icon or right-click → **Extension options**).
 2. Enter your Home Assistant hostname or IP (e.g., `myhome.duckdns.org` or `192.168.1.2`).
 3. Choose whether to use SSL (**strongly recommended**; you'll be warned if not enabled).
 4. Enter your Home Assistant [Webhook ID](https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger) (just the ID, not the full URL).
 5. Optionally, add a username and device name to include in the payload.
 6. Click **Save** and approve access to your specific Home Assistant host. Then click **Test** to send a sample POST request. Confirm that the automation actually triggered in Home Assistant; an HTTP success alone does not verify it.
+
+**Profile configuration:** Choose your default in **Send profiles**. Add a
+custom profile using a display name such as `Download video` and the
+case-sensitive Home Assistant context `YTDL`. Existing profiles appear as
+compact rows; choose Edit to modify one. In **Preferences**, enable
+**Send immediately when I open the popup** only if you want to skip selecting a
+profile for ordinary sends. Advanced settings include update checking, privacy,
+and a confirmed reset.
 
 **Updating from a previous version:** Open Options and click Save once to grant the new scoped host permission. An existing synced webhook ID is migrated to local storage. On another browser or computer, you may need to enter the ID again after migration.
 
