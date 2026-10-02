@@ -33,7 +33,7 @@ test('each connection control has a unique ID, useful label and explicit action'
   for (const id of ['save', 'test', 'toggleWebhookId', 'connectionState', 'status']) {
     assert.match(options, new RegExp('id="' + id + '"'));
   }
-  assert.match(options, /id="resetConfirmation"[^>]*hidden/);
+  assert.match(options, /class="reset-confirm hidden" id="resetConfirmation"/);
   assert.match(options, /id="confirmClearConfig"/);
   assert.match(options, /id="cancelClearConfig"/);
   assert.match(options, /Send test sends sample data/);
