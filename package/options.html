@@ -179,21 +179,21 @@
                 </span>
               </label>
             </div>
-            <div class="preference">
-              <label class="check-row" for="updateCheckToggle">
-                <input id="updateCheckToggle" type="checkbox">
-                <span>
-                  <strong>Check GitHub for updates</strong>
-                  <small>Optional. When enabled, the extension checks for a new release approximately once a day.</small>
-                </span>
-              </label>
-              <div id="updateStatus" class="update-status hidden" role="status" aria-live="polite"></div>
-            </div>
-
             <div class="status hidden" id="preferenceStatus" role="status" aria-live="polite"></div>
 
             <details class="settings-details advanced-settings">
               <summary>Privacy and advanced settings</summary>
+              <div class="preference">
+                <label class="check-row" for="updateCheckToggle">
+                  <input id="updateCheckToggle" type="checkbox" disabled>
+                  <span>
+                    <strong>Check GitHub for updates</strong>
+                    <small>Optional. When enabled, the extension checks for a new release approximately once a day.</small>
+                  </span>
+                </label>
+                <div id="updateStatus" class="update-status hidden" role="status" aria-live="polite"></div>
+                <div class="status hidden" id="updatePreferenceStatus" role="status" aria-live="polite"></div>
+              </div>
               <div class="privacy-copy">
                 Page information is sent only when you send it, or when you enable immediate sending.
                 Profiles and non-secret settings may sync through your browser. Your webhook ID stays on this device.
