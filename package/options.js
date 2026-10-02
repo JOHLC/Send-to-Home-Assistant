@@ -28,6 +28,7 @@ const identitySettings = document.getElementById('identitySettings');
 const resetConfirmation = document.getElementById('resetConfirmation');
 const confirmResetBtn = document.getElementById('confirmClearConfig');
 const cancelResetBtn = document.getElementById('cancelClearConfig');
+const resetStatus = document.getElementById('resetStatus');
 let connectionDirty = false;
 let saveInProgress = false;
 let resetInProgress = false;
@@ -278,6 +279,8 @@ function setupEventListeners() {
     });
     cancelResetBtn.addEventListener('click', () => {
       resetConfirmation.classList.add('hidden');
+      resetStatus.textContent = '';
+      resetStatus.className = 'status hidden';
       clearBtn.disabled = false;
     });
     confirmResetBtn.addEventListener('click', async() => {
@@ -286,6 +289,8 @@ function setupEventListeners() {
       }
       confirmResetBtn.disabled = true;
       cancelResetBtn.disabled = true;
+      resetStatus.textContent = '';
+      resetStatus.className = 'status hidden';
       try {
         const resetSucceeded = await handleClearConfig();
         if (resetSucceeded) {
@@ -474,13 +479,18 @@ async function handleClearConfig() {
     if (typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new Event('send-ha-settings-reset'));
     }
+    resetStatus.textContent = '';
+    resetStatus.className = 'status hidden';
     showStatus('Connection, profiles and update preferences cleared; webhook access revoked.', 'success');
     return true;
   } catch (error) {
     connectionDirty = true;
     setConnectionState('Reset incomplete', 'unsaved');
-    showStatus('Reset incomplete: ' + error.message +
-      '. Some settings may already be cleared. Retry or cancel and check your settings.', 'error');
+    const message = 'Reset incomplete: ' + error.message +
+      '. Some settings may already be cleared. Retry or cancel and check your settings.';
+    resetStatus.textContent = message;
+    resetStatus.className = 'status error';
+    showStatus(message, 'error');
     return false;
   } finally {
     resetInProgress = false;
