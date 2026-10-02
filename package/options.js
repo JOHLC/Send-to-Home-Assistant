@@ -203,9 +203,8 @@ function displayUpdateStatus(updateDiv) {
  */
 function loadSavedConfiguration() {
   // Do not replace edits made while the asynchronous initial read is pending.
-  const wasDirty = connectionDirty;
   ExtensionUtils.getStorageConfig().then((result) => {
-    if (connectionDirty && !wasDirty) {
+    if (connectionDirty) {
       setConnectionState('Unsaved changes', 'unsaved');
       return;
     }
@@ -357,9 +356,13 @@ async function handleSave() {
         return;
       }
     }
-    setConnectionState(saved ? 'Saved · permissions need attention' : 'Unsaved changes', 'unsaved');
-    showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
-      'Save failed: ' + error.message, 'error');
+    const newerEdits = JSON.stringify(getFormConfiguration()) !== JSON.stringify(config);
+    setConnectionState(saved && !newerEdits ?
+      'Saved · permissions need attention' : 'Unsaved changes', 'unsaved');
+    const staleFieldsWarning = newerEdits ?
+      ' Newer edits in the form are not saved.' : '';
+    showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' +
+      error.message + '.' + staleFieldsWarning : 'Save failed: ' + error.message, 'error');
   } finally {
     saveInProgress = false;
     saveBtn.disabled = false;
