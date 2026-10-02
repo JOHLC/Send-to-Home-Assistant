@@ -12,7 +12,13 @@ const utilsSource = fs.readFileSync(path.join(__dirname, '../package/utils.js'),
 function harness({ savedHost = 'old.example.test', formHost = 'new.example.test',
   existingGrants = [], status = 200, failSave = false, blockSave = false,
   failResetLocal = false, failResetSync = false, failRevoke = false,
-  blockTest = false, blockResetLocal = false } = {}) {
+  blockTest = false, blockResetLocal = false, legacy = false,
+  blockLegacySyncRead = false } = {}) {
+  let releaseLegacySyncRead;
+  let legacyReadReached;
+  let holdLegacySyncRead = blockLegacySyncRead;
+  const legacyReadStarted = blockLegacySyncRead ?
+    new Promise((resolve) => { legacyReadReached = resolve; }) : Promise.resolve();
   let releaseResetLocal;
   let resetLocalReached;
   let holdResetLocal = blockResetLocal;
@@ -33,8 +39,11 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     Promise.resolve();
   const saveGate = blockSave ? new Promise((resolve) => { releaseSave = resolve; }) :
     Promise.resolve();
-  const local = { webhookId: 'secret' };
+  const local = legacy ? {} : { webhookId: 'secret' };
   const sync = { haHost: savedHost, ssl: true, userName: '', deviceName: '' };
+  if (legacy) {
+    sync.webhookId = 'legacy-secret';
+  }
   const previousOrigin = 'https://' + savedHost + '/*';
   const newOrigin = 'https://' + formHost + '/*';
   const granted = new Set([previousOrigin, ...existingGrants]);
@@ -46,8 +55,15 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
   const storage = (data, area) => ({
     get(keys, callback) {
       const names = Array.isArray(keys) ? keys : [keys];
-      callback(Object.fromEntries(names.filter((name) => Object.hasOwn(data, name))
-        .map((name) => [name, data[name]])));
+      const snapshot = Object.fromEntries(names.filter((name) => Object.hasOwn(data, name))
+        .map((name) => [name, data[name]]));
+      if (area === 'sync' && holdLegacySyncRead && names.includes('haHost')) {
+        holdLegacySyncRead = false;
+        releaseLegacySyncRead = () => callback(snapshot);
+        legacyReadReached();
+        return;
+      }
+      callback(snapshot);
     },
     set(values, callback) {
       if (area === 'sync' && failSave) {
@@ -118,7 +134,7 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
   }
   elements.get('haHost').value = formHost;
   elements.get('haPort').value = '443';
-  elements.get('webhookId').value = 'secret';
+  elements.get('webhookId').value = legacy ? 'legacy-secret' : 'secret';
   elements.get('sslToggle').checked = true;
 
   const chrome = {
@@ -171,7 +187,8 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     sync, local, granted, removed, requested, requests,
     previousOrigin, newOrigin, permanent,
     statusElement: elements.get('status'),
-    elements, context, saveStarted, testStarted, resetLocalStarted,
+    elements, context, saveStarted, testStarted, resetLocalStarted, legacyReadStarted,
+    releaseLegacySyncRead: () => releaseLegacySyncRead?.(),
     releaseSave: () => releaseSave?.(),
     releaseTest: () => releaseTest?.(),
     releaseResetLocal: () => releaseResetLocal?.(),
@@ -460,4 +477,52 @@ test('reset waits for slow local removal after sync failure before unlocking Sav
   assert.equal(h.local.webhookId, 'secret', 'Newly saved secret survives the failed reset');
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(h.local.webhookId, 'secret', 'No delayed removal may erase the new secret');
+});
+
+test('a delayed legacy sync read cannot recreate the webhook after Reset', async() => {
+  const h = harness({ legacy: true, blockLegacySyncRead: true });
+  const pendingLoad = h.context.loadSavedConfiguration();
+  await h.legacyReadStarted;
+  assert.equal(h.local.webhookId, undefined);
+  assert.equal(h.sync.webhookId, 'legacy-secret');
+  assert.equal(await h.clear(), true);
+  assert.equal(h.sync.webhookId, undefined);
+  h.releaseLegacySyncRead();
+  await Promise.resolve(pendingLoad);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.local.webhookId, undefined, 'Stale getter must never migrate removed secrets');
+  assert.equal(h.sync.webhookId, undefined);
+  assert.equal(h.elements.get('webhookId').value, '');
+  assert.equal(h.elements.get('connectionState').textContent, 'Not configured');
+});
+
+test('a delayed legacy sync read cannot overwrite a newly saved webhook', async() => {
+  const h = harness({ legacy: true, blockLegacySyncRead: true });
+  const pendingLoad = h.context.loadSavedConfiguration();
+  await h.legacyReadStarted;
+  h.elements.get('webhookId').value = 'replacement-secret';
+  await h.save();
+  assert.equal(h.local.webhookId, 'replacement-secret');
+  assert.equal(h.sync.webhookId, undefined);
+  h.releaseLegacySyncRead();
+  await Promise.resolve(pendingLoad);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.local.webhookId, 'replacement-secret',
+    'Stale getter must not overwrite saved replacement secret');
+  assert.equal(h.sync.webhookId, undefined);
+  assert.equal(h.elements.get('webhookId').value, 'replacement-secret');
+  assert.equal(h.elements.get('connectionState').textContent, 'Saved');
+});
+
+test('explicit Save moves a legacy synchronized webhook into local storage', async() => {
+  const h = harness({ legacy: true });
+  const legacy = await h.context.ExtensionUtils.getStorageConfig();
+  assert.equal(legacy.webhookId, 'legacy-secret');
+  assert.equal(h.local.webhookId, undefined);
+  assert.equal(h.sync.webhookId, 'legacy-secret');
+  await h.save();
+  assert.equal(h.local.webhookId, 'legacy-secret');
+  assert.equal(h.sync.webhookId, undefined);
+  const stored = await h.context.ExtensionUtils.getStorageConfig();
+  assert.equal(stored.webhookId, 'legacy-secret');
 });
