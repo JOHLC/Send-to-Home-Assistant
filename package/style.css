@@ -441,3 +441,146 @@ body { min-width: 0; box-sizing: border-box; }
   outline-offset: 2px;
 }
 button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Scoped action popup: explicit intrinsic width avoids Chromium popup/100vw circular sizing. */
+html.popup-document {
+  width: 376px;
+  min-width: 376px;
+  max-width: 376px;
+  overflow-x: hidden;
+}
+
+body.popup-page {
+  box-sizing: border-box;
+  width: 376px;
+  min-width: 376px;
+  max-width: 376px;
+  min-height: 0;
+  max-height: 580px;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.popup-page .container {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 18px 22px 24px;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  align-items: stretch;
+  gap: 0;
+}
+
+.popup-page .container .icon {
+  width: 58px;
+  height: 58px;
+  margin: 4px 0 12px;
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+.popup-page .container .icon img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.popup-page .settings-link {
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+}
+
+.popup-page .profile-popup-label {
+  width: 100%;
+  margin: 0 0 6px;
+  font-size: 13px;
+  text-align: left;
+  align-self: stretch;
+}
+
+.popup-page .profile-select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 43px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.popup-page #sendBtn {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 14px;
+  white-space: normal;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.popup-page .msg {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.popup-page .preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  max-height: 255px;
+  margin: 12px 0 0;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.popup-page .preview .preview-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 6px;
+  align-items: start;
+}
+
+.popup-page .preview .preview-label {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.popup-page .preview .preview-value {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.popup-page .preview .preview-url {
+  max-width: 100%;
+}
+
+.popup-page #copyBtnWrapper,
+.popup-page .ok-btn {
+  align-self: center;
+}
