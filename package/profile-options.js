@@ -26,11 +26,23 @@
     target.className = error ? 'status error' : 'status success';
   }
 
+  function setEditingDisabled(disabled) {
+    defaultSelect.disabled = disabled || !current;
+    quickSendToggle.disabled = disabled || !current;
+    addButton.disabled = disabled || !current ||
+      current.profiles.length >= ExtensionProfiles.MAX_CUSTOM_PROFILES;
+    for (const button of list.querySelectorAll('button')) {
+      button.disabled = disabled;
+    }
+  }
+
   async function persist(next, successMessage, onFailure, target = status) {
     if (saving) {
+      showMessage('Wait for the previous change to save.', true, target);
       return false;
     }
     saving = true;
+    setEditingDisabled(true);
     try {
       current = await ExtensionProfiles.saveProfileSettings(next);
       render();
@@ -46,6 +58,7 @@
       return false;
     } finally {
       saving = false;
+      setEditingDisabled(false);
     }
   }
 
@@ -171,6 +184,7 @@
     defaultSelect.value = current.defaultProfileId;
     defaultSelect.disabled = false;
     quickSendToggle.checked = current.quickSendDefault;
+    quickSendToggle.disabled = false;
     addButton.disabled = current.profiles.length >= ExtensionProfiles.MAX_CUSTOM_PROFILES;
   }
 
