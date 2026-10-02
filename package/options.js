@@ -37,6 +37,43 @@ let resetInProgress = false;
 let formRevision = 0;
 let savedUpdateCheckEnabled = false;
 
+// All writes initiated by the Options page participate in Reset. Register
+// each profile/preference write before its first async boundary, block new
+// writes when Reset starts, and wait for every in-flight write to settle.
+const settingsCoordinator = {
+  resetActive: false,
+  revision: 0,
+  pendingWrites: new Set(),
+  async runWrite(write) {
+    if (this.resetActive) {
+      throw new Error('Reset is in progress. Retry when it finishes.');
+    }
+    const pending = Promise.resolve().then(write);
+    this.pendingWrites.add(pending);
+    try {
+      return await pending;
+    } finally {
+      this.pendingWrites.delete(pending);
+    }
+  },
+  async beginReset() {
+    this.resetActive = true;
+    this.revision++;
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('send-ha-reset-begin'));
+    }
+    await Promise.allSettled([...this.pendingWrites]);
+  },
+  endReset() {
+    this.resetActive = false;
+    this.revision++;
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('send-ha-reset-end'));
+    }
+  },
+};
+window.ExtensionSettingsCoordinator = settingsCoordinator;
+
 /**
  * Retain legacy hostname:port settings without changing the stored format used
  * by the popup and background worker. Unspecified ports use the protocol default.
@@ -112,52 +149,77 @@ function showUpdatePreferenceMessage(message, type) {
 function initializeUpdateChecking() {
   const updateDiv = document.getElementById('updateStatus');
   const updateCheckToggle = document.getElementById('updateCheckToggle');
-
   if (!updateCheckToggle || !chrome.storage?.local) {
     return;
   }
-  updateCheckToggle.disabled = true;
-  chrome.storage.local.get('updateCheckEnabled', (data) => {
-    if (chrome.runtime.lastError) {
-      showUpdatePreferenceMessage('Could not load update preference: ' +
-        chrome.runtime.lastError.message, 'error');
-      return;
-    }
-    savedUpdateCheckEnabled = data.updateCheckEnabled === true;
-    updateCheckToggle.checked = savedUpdateCheckEnabled;
-    updateCheckToggle.disabled = false;
-    displayUpdateStatus(updateDiv);
-  });
 
-  updateCheckToggle.addEventListener('change', () => {
-    const enabled = updateCheckToggle.checked;
+  function loadPreference() {
+    const revision = settingsCoordinator.revision;
     updateCheckToggle.disabled = true;
-    chrome.storage.local.set({ updateCheckEnabled: enabled }, () => {
-      const storageError = chrome.runtime.lastError?.message;
-      updateCheckToggle.disabled = false;
-      if (storageError) {
-        updateCheckToggle.checked = savedUpdateCheckEnabled;
-        showUpdatePreferenceMessage('Could not save update preference: ' + storageError, 'error');
-        if (updateDiv) {
-          updateDiv.classList.toggle('hidden', !savedUpdateCheckEnabled);
-        }
+    chrome.storage.local.get('updateCheckEnabled', (data) => {
+      if (revision !== settingsCoordinator.revision || settingsCoordinator.resetActive) {
         return;
       }
+      if (chrome.runtime.lastError) {
+        showUpdatePreferenceMessage('Could not load update preference: ' +
+          chrome.runtime.lastError.message, 'error');
+        return;
+      }
+      savedUpdateCheckEnabled = data.updateCheckEnabled === true;
+      updateCheckToggle.checked = savedUpdateCheckEnabled;
+      updateCheckToggle.disabled = false;
+      displayUpdateStatus(updateDiv);
+    });
+  }
 
+  updateCheckToggle.addEventListener('change', async() => {
+    const enabled = updateCheckToggle.checked;
+    updateCheckToggle.disabled = true;
+    try {
+      await settingsCoordinator.runWrite(() => new Promise((resolve, reject) => {
+        chrome.storage.local.set({ updateCheckEnabled: enabled }, () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      }));
+      if (settingsCoordinator.resetActive) {
+        return;
+      }
       savedUpdateCheckEnabled = enabled;
       showUpdatePreferenceMessage(enabled ? 'Automatic update checks enabled.' :
         'Automatic update checks disabled.', 'success');
       displayUpdateStatus(updateDiv);
-      // Storage is authoritative. A temporarily unavailable background worker
-      // should not make a successfully saved preference appear to have failed.
       try {
         Promise.resolve(chrome.runtime.sendMessage({ type: 'update-preference-changed' }))
           .catch((error) => console.warn('Update schedule will refresh on startup:', error));
       } catch (error) {
         console.warn('Update schedule will refresh on startup:', error);
       }
-    });
+    } catch (error) {
+      if (settingsCoordinator.resetActive) {
+        return;
+      }
+      updateCheckToggle.checked = savedUpdateCheckEnabled;
+      showUpdatePreferenceMessage('Could not save update preference: ' +
+        error.message, 'error');
+      if (updateDiv) {
+        updateDiv.classList.toggle('hidden', !savedUpdateCheckEnabled);
+      }
+    } finally {
+      updateCheckToggle.disabled = settingsCoordinator.resetActive;
+    }
   });
+
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('send-ha-reset-begin', () => {
+      updateCheckToggle.disabled = true;
+    });
+    window.addEventListener('send-ha-reset-end', loadPreference);
+  }
+  loadPreference();
 }
 
 /**
@@ -451,6 +513,9 @@ async function handleClearConfig() {
   formRevision++;
   clearBtn.disabled = true;
   try {
+    // Block new profile and update-check writes, then wait for pending ones
+    // before clearing the same sync/local keys.
+    await settingsCoordinator.beginReset();
     // Wait for BOTH storage areas, even when one removal fails. Promise.all
     // rejects early and could release the reset lock while the other removal
     // is still pending, deleting a later Save or retry.
@@ -521,6 +586,7 @@ async function handleClearConfig() {
     showStatus(message, 'error');
     return false;
   } finally {
+    settingsCoordinator.endReset();
     resetInProgress = false;
   }
 }
