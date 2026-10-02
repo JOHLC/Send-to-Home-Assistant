@@ -99,8 +99,8 @@ currently shown, even if they have not been saved, and may trigger your Home
 Assistant automation. The webhook ID is stored locally in this browser.
 
 1. Open the extension options (popup gear icon or right-click → **Extension options**).
-2. Enter your Home Assistant hostname or IP (e.g., `myhome.duckdns.org` or `192.168.1.2`).
-3. Choose whether to use SSL (**strongly recommended**; you'll be warned if not enabled).
+2. Enter your Home Assistant hostname or IP (e.g., `myhome.duckdns.org` or `192.168.1.2`), without a protocol or port.
+3. HTTPS is enabled by default, with **port 443** preselected. Change the Port field for a nonstandard installation, such as 8123. Turning HTTPS off switches the default to port 80 but preserves custom port choices. Existing saved `hostname:port` settings appear in the separate Port field when upgrading.
 4. Enter your Home Assistant [Webhook ID](https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger) (just the ID, not the full URL).
 5. Optionally, add a username and device name to include in the payload.
 6. Click **Save** and approve access to your specific Home Assistant host. Then click **Test** to send a sample POST request. Confirm that the automation actually triggered in Home Assistant; an HTTP success alone does not verify it.
