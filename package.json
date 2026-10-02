@@ -1,6 +1,6 @@
 {
   "name": "send-to-home-assistant",
-  "version": "2026.10.1",
+  "version": "2026.10.2",
   "description": "Browser extension to send page information to Home Assistant webhooks",
   "main": "package/manifest.json",
   "scripts": {
