@@ -10,7 +10,17 @@ const optionsSource = fs.readFileSync(path.join(__dirname, '../package/options.j
 const utilsSource = fs.readFileSync(path.join(__dirname, '../package/utils.js'), 'utf8');
 
 function harness({ savedHost = 'old.example.test', formHost = 'new.example.test',
-  existingGrants = [], status = 200, failSave = false } = {}) {
+  existingGrants = [], status = 200, failSave = false, blockSave = false,
+  failResetLocal = false, failResetSync = false, failRevoke = false } = {}) {
+  let failLocalRemoval = failResetLocal;
+  let failSyncRemoval = failResetSync;
+  let failPermissionRemoval = failRevoke;
+  let releaseSave;
+  let saveReached;
+  const saveStarted = blockSave ? new Promise((resolve) => { saveReached = resolve; }) :
+    Promise.resolve();
+  const saveGate = blockSave ? new Promise((resolve) => { releaseSave = resolve; }) :
+    Promise.resolve();
   const local = { webhookId: 'secret' };
   const sync = { haHost: savedHost, ssl: true, userName: '', deviceName: '' };
   const previousOrigin = 'https://' + savedHost + '/*';
@@ -34,11 +44,29 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
         chrome.runtime.lastError = null;
         return;
       }
+      if (blockSave && area === 'sync' && Object.hasOwn(values, 'haHost')) {
+        saveReached();
+        saveGate.then(() => {
+          Object.assign(data, values);
+          callback();
+        });
+        return;
+      }
       Object.assign(data, values);
       callback();
     },
     remove(keys, callback) {
-      for (const key of Array.isArray(keys) ? keys : [keys]) {
+      const names = Array.isArray(keys) ? keys : [keys];
+      const shouldFail = Array.isArray(keys) &&
+        ((area === 'sync' && failSyncRemoval && names.includes('haHost')) ||
+         (area === 'local' && failLocalRemoval && names.includes('webhookId')));
+      if (shouldFail) {
+        chrome.runtime.lastError = { message: 'Simulated reset storage failure' };
+        callback();
+        chrome.runtime.lastError = null;
+        return;
+      }
+      for (const key of names) {
         delete data[key];
       }
       callback();
@@ -47,9 +75,22 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
 
   const elements = new Map();
   for (const id of ['haHost', 'sslToggle', 'webhookId', 'userName', 'deviceName',
-    'status', 'save', 'test', 'clearConfig', 'haPort']) {
-    elements.set(id, { value: '', checked: true, disabled: false, className: '', textContent: '',
-      addEventListener() {} });
+    'status', 'save', 'test', 'clearConfig', 'haPort', 'connectionState',
+    'toggleWebhookId', 'resetConfirmation', 'confirmClearConfig', 'cancelClearConfig']) {
+    const classes = new Set(id === 'resetConfirmation' ? ['hidden'] : []);
+    const attributes = {};
+    elements.set(id, {
+      value: '', checked: true, disabled: false, className: '', textContent: '',
+      type: id === 'webhookId' ? 'password' : 'text',
+      dataset: {}, attributes,
+      classList: {
+        add(name) { classes.add(name); },
+        remove(name) { classes.delete(name); },
+        contains(name) { return classes.has(name); },
+      },
+      setAttribute(name, value) { attributes[name] = value; },
+      addEventListener() {},
+    });
   }
   elements.get('haHost').value = formHost;
   elements.get('haPort').value = '443';
@@ -68,6 +109,9 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
       },
       getAll: async() => ({ origins: [permanent, ...granted] }),
       remove: async({ origins }) => {
+        if (failPermissionRemoval) {
+          return false;
+        }
         removed.push(...origins);
         origins.forEach((origin) => granted.delete(origin));
         return true;
@@ -99,7 +143,14 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     sync, local, granted, removed, requested, requests,
     previousOrigin, newOrigin, permanent,
     statusElement: elements.get('status'),
-    elements, context,
+    elements, context, saveStarted,
+    releaseSave: () => releaseSave?.(),
+    setResetFailures({ local: localFailure = false, sync: syncFailure = false,
+      permissions: permissionFailure = false } = {}) {
+      failLocalRemoval = localFailure;
+      failSyncRemoval = syncFailure;
+      failPermissionRemoval = permissionFailure;
+    },
   };
 }
 
@@ -234,4 +285,59 @@ test('invalid ports and embedded host:port values are rejected', async() => {
   assert.equal(h.context.validateConfiguration(h.context.getFormConfiguration()).valid, false);
   await h.save();
   assert.equal(h.sync.haHost, 'old.example.test', 'Invalid form must not overwrite saved host');
+});
+
+test('edits made during an asynchronous save remain visibly unsaved', async() => {
+  const h = harness({ blockSave: true });
+  const pending = h.save();
+  await h.saveStarted;
+  h.elements.get('haHost').value = 'newer.example.test';
+  h.releaseSave();
+  await pending;
+  assert.equal(h.sync.haHost, 'new.example.test');
+  assert.equal(h.elements.get('connectionState').textContent, 'Unsaved changes');
+  assert.equal(h.elements.get('connectionState').dataset.state, 'unsaved');
+  assert.match(h.statusElement.textContent, /newer changes are still unsaved/);
+  await h.save();
+  assert.equal(h.sync.haHost, 'newer.example.test');
+  assert.equal(h.elements.get('connectionState').textContent, 'Saved');
+});
+
+test('failed reset reports incomplete state, leaves stored secret and allows retry', async() => {
+  const h = harness({ failResetLocal: true });
+  const first = await h.clear();
+  assert.equal(first, false);
+  assert.equal(h.local.webhookId, 'secret');
+  assert.equal(h.elements.get('connectionState').textContent, 'Reset incomplete');
+  assert.match(h.statusElement.textContent, /Some settings may already be cleared/);
+  h.setResetFailures();
+  const second = await h.clear();
+  assert.equal(second, true);
+  assert.equal(h.local.webhookId, undefined);
+  assert.equal(h.elements.get('connectionState').textContent, 'Not configured');
+});
+
+test('failed permission cleanup is not reported as a completed reset', async() => {
+  const h = harness({ failRevoke: true });
+  assert.equal(await h.clear(), false);
+  assert.equal(h.granted.has(h.previousOrigin), true);
+  assert.match(h.statusElement.textContent, /Reset incomplete/);
+  h.setResetFailures();
+  assert.equal(await h.clear(), true);
+  assert.equal(h.granted.size, 0);
+});
+
+test('confirmed reset remasks webhook input and resets reveal accessibility state', async() => {
+  const h = harness();
+  const secret = h.elements.get('webhookId');
+  const reveal = h.elements.get('toggleWebhookId');
+  secret.type = 'text';
+  reveal.textContent = 'Hide';
+  reveal.setAttribute('aria-pressed', 'true');
+  assert.equal(await h.clear(), true);
+  assert.equal(secret.value, '');
+  assert.equal(secret.type, 'password');
+  assert.equal(reveal.textContent, 'Show');
+  assert.equal(reveal.attributes['aria-pressed'], 'false');
+  assert.equal(reveal.attributes['aria-label'], 'Show webhook ID');
 });
