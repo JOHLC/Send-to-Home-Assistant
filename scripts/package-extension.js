@@ -24,7 +24,11 @@ function createPackage() {
     }
   }
   fs.mkdirSync(destination, { recursive: true });
-  const output = path.join(destination, 'send-to-home-assistant-v' + manifest.version + '.zip');
+  const displayVersion = manifest.version_name || manifest.version;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(displayVersion)) {
+    throw new Error('Invalid release display version for ZIP filename');
+  }
+  const output = path.join(destination, 'send-to-home-assistant-v' + displayVersion + '.zip');
   fs.rmSync(output, { force: true });
   let result;
   if (os.platform() === 'win32') {
