@@ -31,7 +31,10 @@ const cancelResetBtn = document.getElementById('cancelClearConfig');
 const resetStatus = document.getElementById('resetStatus');
 let connectionDirty = false;
 let saveInProgress = false;
+let testInProgress = false;
 let resetInProgress = false;
+// Invalidates any asynchronous initial read when a newer form action occurs.
+let formRevision = 0;
 let savedUpdateCheckEnabled = false;
 
 /**
@@ -203,10 +206,12 @@ function displayUpdateStatus(updateDiv) {
  * Load saved configuration from storage
  */
 function loadSavedConfiguration() {
-  // Do not replace edits made while the asynchronous initial read is pending.
+  const loadRevision = formRevision;
   ExtensionUtils.getStorageConfig().then((result) => {
-    if (connectionDirty) {
-      setConnectionState('Unsaved changes', 'unsaved');
+    // A Save, Test, Reset, or user edit can start and finish while this read is
+    // outstanding. Never resurrect a stale credential or overwrite newer input.
+    if (loadRevision !== formRevision || connectionDirty ||
+        saveInProgress || testInProgress || resetInProgress) {
       return;
     }
     const address = splitStoredAddress(result.haHost, result.ssl);
@@ -226,8 +231,10 @@ function loadSavedConfiguration() {
       identitySettings.open = true;
     }
   }).catch((error) => {
-    setConnectionState('Could not load settings', 'unsaved');
-    showStatus(error.message, 'error');
+    if (loadRevision === formRevision) {
+      setConnectionState('Could not load settings', 'unsaved');
+      showStatus(error.message, 'error');
+    }
   });
 }
 
@@ -251,11 +258,13 @@ function setupEventListeners() {
       continue;
     }
     field.addEventListener('input', () => {
+      formRevision++;
       connectionDirty = true;
       setConnectionState('Unsaved changes', 'unsaved');
       clearStatus();
     });
     field.addEventListener('change', () => {
+      formRevision++;
       connectionDirty = true;
       setConnectionState('Unsaved changes', 'unsaved');
       clearStatus();
@@ -312,7 +321,7 @@ function setupEventListeners() {
  * Handle save button click
  */
 async function handleSave() {
-  if (saveInProgress || resetInProgress) {
+  if (saveInProgress || testInProgress || resetInProgress) {
     return;
   }
   const config = getFormConfiguration();
@@ -323,6 +332,7 @@ async function handleSave() {
   }
 
   saveInProgress = true;
+  formRevision++;
   saveBtn.disabled = true;
   testBtn.disabled = true;
   clearBtn.disabled = true;
@@ -381,6 +391,9 @@ async function handleSave() {
  * Handle test button click
  */
 async function handleTest() {
+  if (saveInProgress || testInProgress || resetInProgress) {
+    return;
+  }
   const config = getFormConfiguration();
   const validation = validateConfiguration(config);
   if (!validation.valid) {
@@ -388,7 +401,11 @@ async function handleTest() {
     return;
   }
 
+  testInProgress = true;
+  formRevision++;
   testBtn.disabled = true;
+  saveBtn.disabled = true;
+  clearBtn.disabled = true;
   let requestedOrigin = null;
   let savedOrigin = null;
   try {
@@ -415,7 +432,10 @@ async function handleTest() {
         showStatus('Test finished, but temporary site access could not be removed: ' + error.message, 'error');
       }
     }
+    testInProgress = false;
     testBtn.disabled = false;
+    saveBtn.disabled = false;
+    clearBtn.disabled = !resetConfirmation.classList.contains('hidden');
   }
 }
 
@@ -423,11 +443,12 @@ async function handleTest() {
  * Handle clear config button click
  */
 async function handleClearConfig() {
-  if (resetInProgress || saveInProgress) {
+  if (resetInProgress || saveInProgress || testInProgress) {
     showStatus('Wait for the current operation before resetting settings.', 'error');
     return false;
   }
   resetInProgress = true;
+  formRevision++;
   clearBtn.disabled = true;
   try {
     await Promise.all([
