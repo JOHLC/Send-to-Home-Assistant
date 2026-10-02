@@ -26,7 +26,7 @@ test('options are split into named connection, profiles and preferences sections
 });
 
 test('each connection control has a unique ID, useful label and explicit action', () => {
-  for (const id of ['haHost', 'sslToggle', 'webhookId', 'userName', 'deviceName']) {
+  for (const id of ['haHost', 'haPort', 'sslToggle', 'webhookId', 'userName', 'deviceName']) {
     assert.match(options, new RegExp('id="' + id + '"'));
     assert.match(options, new RegExp('for="' + id + '"'));
   }
@@ -36,6 +36,9 @@ test('each connection control has a unique ID, useful label and explicit action'
   assert.match(options, /class="reset-confirm hidden" id="resetConfirmation"/);
   assert.match(options, /id="confirmClearConfig"/);
   assert.match(options, /id="cancelClearConfig"/);
+  assert.match(options, /id="haPort"[^>]*inputmode="numeric"/);
+  assert.match(options, /value="443" placeholder="443"/);
+  assert.match(stylesheet, /\.connection-address-grid\s*\{/);
   assert.match(options, /Send test sends sample data/);
   assert.match(optionsScript, /setConnectionState\('Unsaved changes'/);
   assert.match(optionsScript, /resetConfirmation\.classList\.remove\('hidden'\)/);
