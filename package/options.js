@@ -29,6 +29,7 @@ const resetConfirmation = document.getElementById('resetConfirmation');
 const confirmResetBtn = document.getElementById('confirmClearConfig');
 const cancelResetBtn = document.getElementById('cancelClearConfig');
 let connectionDirty = false;
+let savedUpdateCheckEnabled = false;
 
 /**
  * Retain legacy hostname:port settings without changing the stored format used
@@ -93,35 +94,64 @@ function initializeVersionDisplay() {
 /**
  * Initialize update checking functionality
  */
+function showUpdatePreferenceMessage(message, type) {
+  const feedback = document.getElementById('updatePreferenceStatus');
+  if (!feedback) {
+    return;
+  }
+  feedback.textContent = message;
+  feedback.className = type ? 'status ' + type : 'status';
+}
+
 function initializeUpdateChecking() {
   const updateDiv = document.getElementById('updateStatus');
   const updateCheckToggle = document.getElementById('updateCheckToggle');
-  
-  if (!updateCheckToggle || !chrome.storage || !chrome.storage.local) {
+
+  if (!updateCheckToggle || !chrome.storage?.local) {
     return;
   }
-
-  // Load update check preference
+  updateCheckToggle.disabled = true;
   chrome.storage.local.get('updateCheckEnabled', (data) => {
-    updateCheckToggle.checked = typeof data.updateCheckEnabled === 'boolean' 
-      ? data.updateCheckEnabled 
-      : false; // opt-in
-  });
-
-  // Handle toggle changes
-  updateCheckToggle.addEventListener('change', () => {
-    chrome.storage.local.set({ updateCheckEnabled: updateCheckToggle.checked }, () => {
-      chrome.runtime.sendMessage({ type: 'update-preference-changed' }).catch(console.warn);
-    });
-    
-    // Show/hide update status based on toggle
-    if (updateDiv) {
-      updateDiv.classList.toggle('hidden', !updateCheckToggle.checked);
+    if (chrome.runtime.lastError) {
+      showUpdatePreferenceMessage('Could not load update preference: ' +
+        chrome.runtime.lastError.message, 'error');
+      return;
     }
+    savedUpdateCheckEnabled = data.updateCheckEnabled === true;
+    updateCheckToggle.checked = savedUpdateCheckEnabled;
+    updateCheckToggle.disabled = false;
+    displayUpdateStatus(updateDiv);
   });
 
-  // Display current update status
-  displayUpdateStatus(updateDiv);
+  updateCheckToggle.addEventListener('change', () => {
+    const enabled = updateCheckToggle.checked;
+    updateCheckToggle.disabled = true;
+    chrome.storage.local.set({ updateCheckEnabled: enabled }, () => {
+      const storageError = chrome.runtime.lastError?.message;
+      updateCheckToggle.disabled = false;
+      if (storageError) {
+        updateCheckToggle.checked = savedUpdateCheckEnabled;
+        showUpdatePreferenceMessage('Could not save update preference: ' + storageError, 'error');
+        if (updateDiv) {
+          updateDiv.classList.toggle('hidden', !savedUpdateCheckEnabled);
+        }
+        return;
+      }
+
+      savedUpdateCheckEnabled = enabled;
+      showUpdatePreferenceMessage(enabled ? 'Automatic update checks enabled.' :
+        'Automatic update checks disabled.', 'success');
+      displayUpdateStatus(updateDiv);
+      // Storage is authoritative. A temporarily unavailable background worker
+      // should not make a successfully saved preference appear to have failed.
+      try {
+        Promise.resolve(chrome.runtime.sendMessage({ type: 'update-preference-changed' }))
+          .catch((error) => console.warn('Update schedule will refresh on startup:', error));
+      } catch (error) {
+        console.warn('Update schedule will refresh on startup:', error);
+      }
+    });
+  });
 }
 
 /**
@@ -371,8 +401,15 @@ async function handleClearConfig() {
     }
     updateSslWarning();
     const updateToggle = document.getElementById('updateCheckToggle');
+    savedUpdateCheckEnabled = false;
     if (updateToggle) {
       updateToggle.checked = false;
+      updateToggle.disabled = false;
+    }
+    const updatePreferenceStatus = document.getElementById('updatePreferenceStatus');
+    if (updatePreferenceStatus) {
+      updatePreferenceStatus.textContent = '';
+      updatePreferenceStatus.className = 'status hidden';
     }
     const updateStatus = document.getElementById('updateStatus');
     if (updateStatus) {
@@ -381,6 +418,11 @@ async function handleClearConfig() {
     }
     connectionDirty = false;
     setConnectionState('Not configured');
+    // Prompt the profile editor to refresh immediately, independent of delayed
+    // storage.onChanged notifications from other extension contexts.
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('send-ha-settings-reset'));
+    }
     showStatus('Connection, profiles and update preferences cleared; webhook access revoked.', 'success');
   } catch (error) {
     showStatus('Could not clear all settings or site access: ' + error.message, 'error');
