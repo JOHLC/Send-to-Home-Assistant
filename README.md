@@ -113,7 +113,7 @@ compact rows; choose Edit to modify one. In **Preferences**, enable
 profile for ordinary sends. Advanced settings include update checking, privacy,
 and a confirmed reset.
 
-**Updating from a previous version:** Open Options and click Save once to grant the new scoped host permission. An existing synced webhook ID is migrated to local storage. On another browser or computer, you may need to enter the ID again after migration.
+**Updating from a previous version:** Open Options and click Save once to grant the new scoped host permission. A legacy synchronized webhook ID stays readable without being moved during background reads; clicking Save explicitly copies it to local storage and removes the old synchronized copy. On another browser or computer, you may need to enter the ID again after migration.
 
 ### Profiles and Home Assistant routing
 

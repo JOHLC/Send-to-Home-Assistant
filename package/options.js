@@ -28,8 +28,53 @@ const identitySettings = document.getElementById('identitySettings');
 const resetConfirmation = document.getElementById('resetConfirmation');
 const confirmResetBtn = document.getElementById('confirmClearConfig');
 const cancelResetBtn = document.getElementById('cancelClearConfig');
+const resetStatus = document.getElementById('resetStatus');
 let connectionDirty = false;
+let saveInProgress = false;
+let testInProgress = false;
+let resetInProgress = false;
+// Invalidates any asynchronous initial read when a newer form action occurs.
+let formRevision = 0;
 let savedUpdateCheckEnabled = false;
+// A later status request wins even when an earlier read resolves out of order.
+let updateStatusRequestId = 0;
+
+// All writes initiated by the Options page participate in Reset. Register
+// each profile/preference write before its first async boundary, block new
+// writes when Reset starts, and wait for every in-flight write to settle.
+const settingsCoordinator = {
+  resetActive: false,
+  revision: 0,
+  pendingWrites: new Set(),
+  async runWrite(write) {
+    if (this.resetActive) {
+      throw new Error('Reset is in progress. Retry when it finishes.');
+    }
+    const pending = Promise.resolve().then(write);
+    this.pendingWrites.add(pending);
+    try {
+      return await pending;
+    } finally {
+      this.pendingWrites.delete(pending);
+    }
+  },
+  async beginReset() {
+    this.resetActive = true;
+    this.revision++;
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('send-ha-reset-begin'));
+    }
+    await Promise.allSettled([...this.pendingWrites]);
+  },
+  endReset() {
+    this.resetActive = false;
+    this.revision++;
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('send-ha-reset-end'));
+    }
+  },
+};
+window.ExtensionSettingsCoordinator = settingsCoordinator;
 
 /**
  * Retain legacy hostname:port settings without changing the stored format used
@@ -106,63 +151,97 @@ function showUpdatePreferenceMessage(message, type) {
 function initializeUpdateChecking() {
   const updateDiv = document.getElementById('updateStatus');
   const updateCheckToggle = document.getElementById('updateCheckToggle');
-
   if (!updateCheckToggle || !chrome.storage?.local) {
     return;
   }
-  updateCheckToggle.disabled = true;
-  chrome.storage.local.get('updateCheckEnabled', (data) => {
-    if (chrome.runtime.lastError) {
-      showUpdatePreferenceMessage('Could not load update preference: ' +
-        chrome.runtime.lastError.message, 'error');
-      return;
-    }
-    savedUpdateCheckEnabled = data.updateCheckEnabled === true;
-    updateCheckToggle.checked = savedUpdateCheckEnabled;
-    updateCheckToggle.disabled = false;
-    displayUpdateStatus(updateDiv);
-  });
 
-  updateCheckToggle.addEventListener('change', () => {
-    const enabled = updateCheckToggle.checked;
+  function loadPreference() {
+    const revision = settingsCoordinator.revision;
     updateCheckToggle.disabled = true;
-    chrome.storage.local.set({ updateCheckEnabled: enabled }, () => {
-      const storageError = chrome.runtime.lastError?.message;
-      updateCheckToggle.disabled = false;
-      if (storageError) {
-        updateCheckToggle.checked = savedUpdateCheckEnabled;
-        showUpdatePreferenceMessage('Could not save update preference: ' + storageError, 'error');
-        if (updateDiv) {
-          updateDiv.classList.toggle('hidden', !savedUpdateCheckEnabled);
-        }
+    chrome.storage.local.get('updateCheckEnabled', (data) => {
+      if (revision !== settingsCoordinator.revision || settingsCoordinator.resetActive) {
         return;
       }
+      if (chrome.runtime.lastError) {
+        showUpdatePreferenceMessage('Could not load update preference: ' +
+          chrome.runtime.lastError.message, 'error');
+        return;
+      }
+      savedUpdateCheckEnabled = data.updateCheckEnabled === true;
+      updateCheckToggle.checked = savedUpdateCheckEnabled;
+      updateCheckToggle.disabled = false;
+      displayUpdateStatus(updateDiv, revision);
+    });
+  }
 
+  updateCheckToggle.addEventListener('change', async() => {
+    const enabled = updateCheckToggle.checked;
+    updateCheckToggle.disabled = true;
+    try {
+      await settingsCoordinator.runWrite(() => new Promise((resolve, reject) => {
+        chrome.storage.local.set({ updateCheckEnabled: enabled }, () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      }));
+      if (settingsCoordinator.resetActive) {
+        return;
+      }
       savedUpdateCheckEnabled = enabled;
       showUpdatePreferenceMessage(enabled ? 'Automatic update checks enabled.' :
         'Automatic update checks disabled.', 'success');
       displayUpdateStatus(updateDiv);
-      // Storage is authoritative. A temporarily unavailable background worker
-      // should not make a successfully saved preference appear to have failed.
       try {
         Promise.resolve(chrome.runtime.sendMessage({ type: 'update-preference-changed' }))
           .catch((error) => console.warn('Update schedule will refresh on startup:', error));
       } catch (error) {
         console.warn('Update schedule will refresh on startup:', error);
       }
-    });
+    } catch (error) {
+      if (settingsCoordinator.resetActive) {
+        return;
+      }
+      updateCheckToggle.checked = savedUpdateCheckEnabled;
+      showUpdatePreferenceMessage('Could not save update preference: ' +
+        error.message, 'error');
+      if (updateDiv) {
+        updateDiv.classList.toggle('hidden', !savedUpdateCheckEnabled);
+      }
+    } finally {
+      updateCheckToggle.disabled = settingsCoordinator.resetActive;
+    }
   });
+
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('send-ha-reset-begin', () => {
+      updateCheckToggle.disabled = true;
+    });
+    window.addEventListener('send-ha-reset-end', loadPreference);
+  }
+  loadPreference();
 }
 
 /**
  * Display update status information
  * @param {HTMLElement} updateDiv - Update status container element
  */
-function displayUpdateStatus(updateDiv) {
-  if (!updateDiv || !chrome.storage?.local) {
+function displayUpdateStatus(updateDiv, revision = settingsCoordinator.revision) {
+  if (!updateDiv || !chrome.storage?.local ||
+      settingsCoordinator.resetActive || revision !== settingsCoordinator.revision) {
     return;
   }
+  const requestId = ++updateStatusRequestId;
   chrome.storage.local.get(['updateInfo', 'updateCheckEnabled'], (data) => {
+    // This is a SECOND storage read after the guarded preference read. It can
+    // complete after Reset or a newer status request and must not redraw stale
+    // update information or re-enable a status that Reset just cleared.
+    if (revision !== settingsCoordinator.revision || settingsCoordinator.resetActive ||
+        requestId !== updateStatusRequestId) {
+      return;
+    }
     const info = data.updateInfo;
     const enabled = data.updateCheckEnabled === true;
     updateDiv.classList.toggle('hidden', !enabled);
@@ -200,7 +279,14 @@ function displayUpdateStatus(updateDiv) {
  * Load saved configuration from storage
  */
 function loadSavedConfiguration() {
+  const loadRevision = formRevision;
   ExtensionUtils.getStorageConfig().then((result) => {
+    // A Save, Test, Reset, or user edit can start and finish while this read is
+    // outstanding. Never resurrect a stale credential or overwrite newer input.
+    if (loadRevision !== formRevision || connectionDirty ||
+        saveInProgress || testInProgress || resetInProgress) {
+      return;
+    }
     const address = splitStoredAddress(result.haHost, result.ssl);
     hostInput.value = address.hostname;
     sslToggle.checked = result.ssl;
@@ -218,8 +304,10 @@ function loadSavedConfiguration() {
       identitySettings.open = true;
     }
   }).catch((error) => {
-    setConnectionState('Could not load settings', 'unsaved');
-    showStatus(error.message, 'error');
+    if (loadRevision === formRevision) {
+      setConnectionState('Could not load settings', 'unsaved');
+      showStatus(error.message, 'error');
+    }
   });
 }
 
@@ -243,11 +331,13 @@ function setupEventListeners() {
       continue;
     }
     field.addEventListener('input', () => {
+      formRevision++;
       connectionDirty = true;
       setConnectionState('Unsaved changes', 'unsaved');
       clearStatus();
     });
     field.addEventListener('change', () => {
+      formRevision++;
       connectionDirty = true;
       setConnectionState('Unsaved changes', 'unsaved');
       clearStatus();
@@ -271,12 +361,29 @@ function setupEventListeners() {
     });
     cancelResetBtn.addEventListener('click', () => {
       resetConfirmation.classList.add('hidden');
+      resetStatus.textContent = '';
+      resetStatus.className = 'status hidden';
       clearBtn.disabled = false;
     });
     confirmResetBtn.addEventListener('click', async() => {
-      await handleClearConfig();
-      resetConfirmation.classList.add('hidden');
-      clearBtn.disabled = false;
+      if (resetInProgress) {
+        return;
+      }
+      confirmResetBtn.disabled = true;
+      cancelResetBtn.disabled = true;
+      resetStatus.textContent = '';
+      resetStatus.className = 'status hidden';
+      try {
+        const resetSucceeded = await handleClearConfig();
+        if (resetSucceeded) {
+          resetConfirmation.classList.add('hidden');
+          clearBtn.disabled = false;
+        }
+        // Keep confirmation visible after failure so the user can retry.
+      } finally {
+        confirmResetBtn.disabled = false;
+        cancelResetBtn.disabled = false;
+      }
     });
   }
 }
@@ -287,6 +394,9 @@ function setupEventListeners() {
  * Handle save button click
  */
 async function handleSave() {
+  if (saveInProgress || testInProgress || resetInProgress) {
+    return;
+  }
   const config = getFormConfiguration();
   const validation = validateConfiguration(config);
   if (!validation.valid) {
@@ -294,40 +404,59 @@ async function handleSave() {
     return;
   }
 
+  saveInProgress = true;
+  formRevision++;
   saveBtn.disabled = true;
+  testBtn.disabled = true;
+  clearBtn.disabled = true;
   let requestedOrigin = null;
   let previousOrigin = null;
   let saved = false;
   try {
-    // Chrome requires permissions.request to run from the Save click's user gesture.
+    // Permission requests must remain in the click's user-activation path.
     requestedOrigin = await requestWebhookPermission(config);
     const previous = await ExtensionUtils.getStorageConfig();
     previousOrigin = configuredWebhookOrigin(previous);
 
     await saveConfiguration(config);
     saved = true;
-    // Remove all stale optional host grants, including ones left by older builds.
     await revokeUnusedWebhookPermissions(requestedOrigin);
-    connectionDirty = false;
-    setConnectionState('Saved', 'saved');
-    showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
+
+    // Users may edit the form during any of the awaited calls above. The saved
+    // snapshot is authoritative; never mark newer, different values as saved.
+    if (JSON.stringify(getFormConfiguration()) === JSON.stringify(config)) {
+      connectionDirty = false;
+      setConnectionState('Saved', 'saved');
+      showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
+    } else {
+      connectionDirty = true;
+      setConnectionState('Unsaved changes', 'unsaved');
+      showStatus('Previous connection saved, but newer changes are still unsaved. Save again.', 'error');
+    }
   } catch (error) {
     if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
       try {
-        // Never leave a newly requested grant behind after a failed save.
         await revokeUnusedWebhookPermissions(previousOrigin);
       } catch (cleanupError) {
+        setConnectionState('Unsaved changes', 'unsaved');
         showStatus('Save failed: ' + error.message + '. Could not revoke temporary access: ' +
           cleanupError.message, 'error');
-        saveBtn.disabled = false;
         return;
       }
     }
-    setConnectionState(saved ? 'Saved · permissions need attention' : 'Unsaved changes', 'unsaved');
-    showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
-      'Save failed: ' + error.message, 'error');
+    const newerEdits = JSON.stringify(getFormConfiguration()) !== JSON.stringify(config);
+    setConnectionState(saved && !newerEdits ?
+      'Saved · permissions need attention' : 'Unsaved changes', 'unsaved');
+    const staleFieldsWarning = newerEdits ?
+      ' Newer edits in the form are not saved.' : '';
+    showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' +
+      error.message + '.' + staleFieldsWarning : 'Save failed: ' + error.message, 'error');
   } finally {
+    saveInProgress = false;
     saveBtn.disabled = false;
+    testBtn.disabled = false;
+    // An already-open confirmation keeps Reset disabled until closed.
+    clearBtn.disabled = !resetConfirmation.classList.contains('hidden');
   }
 }
 
@@ -335,6 +464,9 @@ async function handleSave() {
  * Handle test button click
  */
 async function handleTest() {
+  if (saveInProgress || testInProgress || resetInProgress) {
+    return;
+  }
   const config = getFormConfiguration();
   const validation = validateConfiguration(config);
   if (!validation.valid) {
@@ -342,7 +474,11 @@ async function handleTest() {
     return;
   }
 
+  testInProgress = true;
+  formRevision++;
   testBtn.disabled = true;
+  saveBtn.disabled = true;
+  clearBtn.disabled = true;
   let requestedOrigin = null;
   let savedOrigin = null;
   try {
@@ -369,7 +505,10 @@ async function handleTest() {
         showStatus('Test finished, but temporary site access could not be removed: ' + error.message, 'error');
       }
     }
+    testInProgress = false;
     testBtn.disabled = false;
+    saveBtn.disabled = false;
+    clearBtn.disabled = !resetConfirmation.classList.contains('hidden');
   }
 }
 
@@ -377,9 +516,21 @@ async function handleTest() {
  * Handle clear config button click
  */
 async function handleClearConfig() {
+  if (resetInProgress || saveInProgress || testInProgress) {
+    showStatus('Wait for the current operation before resetting settings.', 'error');
+    return false;
+  }
+  resetInProgress = true;
+  formRevision++;
   clearBtn.disabled = true;
   try {
-    await Promise.all([
+    // Block new profile and update-check writes, then wait for pending ones
+    // before clearing the same sync/local keys.
+    await settingsCoordinator.beginReset();
+    // Wait for BOTH storage areas, even when one removal fails. Promise.all
+    // rejects early and could release the reset lock while the other removal
+    // is still pending, deleting a later Save or retry.
+    const removals = await Promise.allSettled([
       new Promise((resolve, reject) => chrome.storage.sync.remove(
         ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'sendProfiles', 'defaultProfileId', 'quickSendDefault'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
@@ -389,12 +540,21 @@ async function handleClearConfig() {
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
     ]);
+    const failedRemoval = removals.find((result) => result.status === 'rejected');
+    if (failedRemoval) {
+      throw failedRemoval.reason;
+    }
     // Also clean old grants that are not associated with the currently saved host.
     await revokeUnusedWebhookPermissions(null);
     hostInput.value = '';
     sslToggle.checked = true;
     portInput.value = '443';
     webhookIdInput.value = '';
+    // Never allow a replacement secret to inherit the revealed text field.
+    webhookIdInput.type = 'password';
+    webhookVisibilityBtn.textContent = 'Show';
+    webhookVisibilityBtn.setAttribute('aria-label', 'Show webhook ID');
+    webhookVisibilityBtn.setAttribute('aria-pressed', 'false');
     userInput.value = '';
     if (deviceInput) {
       deviceInput.value = '';
@@ -423,11 +583,22 @@ async function handleClearConfig() {
     if (typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new Event('send-ha-settings-reset'));
     }
+    resetStatus.textContent = '';
+    resetStatus.className = 'status hidden';
     showStatus('Connection, profiles and update preferences cleared; webhook access revoked.', 'success');
+    return true;
   } catch (error) {
-    showStatus('Could not clear all settings or site access: ' + error.message, 'error');
+    connectionDirty = true;
+    setConnectionState('Reset incomplete', 'unsaved');
+    const message = 'Reset incomplete: ' + error.message +
+      '. Some settings may already be cleared. Retry or cancel and check your settings.';
+    resetStatus.textContent = message;
+    resetStatus.className = 'status error';
+    showStatus(message, 'error');
+    return false;
   } finally {
-    clearBtn.disabled = false;
+    settingsCoordinator.endReset();
+    resetInProgress = false;
   }
 }
 

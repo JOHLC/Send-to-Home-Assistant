@@ -37,7 +37,7 @@ This extension processes sensitive information:
 
 - **XSS Prevention:** Data is sanitized before display ([test page](/tests/xss-test.html))
 - **Data Transmission:** Data is sent only to your configured Home Assistant instance
-- **Storage Security:** Webhook IDs use extension-local browser storage; non-secret settings may sync. An older synced webhook ID is migrated on first load. Local extension storage is not a hardware-backed secret vault.
+- **Storage Security:** Webhook IDs use extension-local browser storage; non-secret settings may sync. An older synced webhook ID remains readable until you explicitly click Save in Options; that action moves it to local storage and removes the synced copy. Read-only settings loads cannot recreate a cleared secret. Local extension storage is not a hardware-backed secret vault.
 - **Permissions:** The configured Home Assistant origin is requested at runtime. GitHub release-check access is declared separately; update checks are opt-in.
 
 ## Response Timeline
