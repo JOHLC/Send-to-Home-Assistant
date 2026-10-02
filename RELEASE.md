@@ -24,6 +24,23 @@ tag**. Keep the numeric Chrome version strictly increasing for Chrome Web Store
 updates; merely changing the prerelease display name does not create an
 upgradable browser extension version.
 
+## Next beta: 2026.10.2-Beta3 popup repair
+
+The Beta2 extension popup could collapse into an unusable narrow column because
+its width was tied to `100vw` with no intrinsic document minimum. Beta3 gives
+the popup document and body a dedicated 376px width and keeps the Options
+page responsive sizing independent.
+
+After the popup fix lands in `main`, publish a **new prerelease** using the tag
+`2026.10.2-Beta3` on that commit. The published-release workflow will
+validate the numeric Chrome version and descriptive beta version before
+uploading `send-to-home-assistant-v2026.10.2-Beta3.zip`. Do not reuse
+`2026.10.1-Beta2`; browsers need a higher numeric manifest version to update.
+
+Before publishing, load the CI ZIP in Chrome and Edge and verify the toolbar
+popup remains 376px wide at normal zoom, the default/YTDL profile selector
+works, and a successful send preview scrolls without horizontal clipping.
+
 ## Recover the existing 2026.10.1-Beta2 release
 
 The existing Beta2 tag points at the earlier merge commit. Re-running the
