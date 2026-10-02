@@ -14,6 +14,7 @@ module.exports = {
   globals: {
     chrome: 'readonly',
     ExtensionUtils: 'readonly',
+    ExtensionProfiles: 'readonly',
     importScripts: 'readonly',
   },
   rules: {

@@ -254,7 +254,7 @@ async function handleClearConfig() {
   try {
     await Promise.all([
       new Promise((resolve, reject) => chrome.storage.sync.remove(
-        ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName'],
+        ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'sendProfiles', 'defaultProfileId', 'quickSendDefault'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
       new Promise((resolve, reject) => chrome.storage.local.remove('webhookId',

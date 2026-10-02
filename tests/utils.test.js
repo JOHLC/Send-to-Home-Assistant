@@ -7,9 +7,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../package/utils.js'), 'utf8');
+const profileSource = fs.readFileSync(path.join(__dirname, '../package/profiles.js'), 'utf8');
 
-function harness({ legacy = false, allowed = true, extractionFails = false, httpStatus = 200 } = {}) {
+function harness({ legacy = false, allowed = true, extractionFails = false,
+  httpStatus = 200, profileConfig = null } = {}) {
   const sync = { haHost: 'ha.example.test:8123', ssl: true, userName: 'User', deviceName: 'Laptop' };
+  if (profileConfig) {
+    Object.assign(sync, profileConfig);
+  }
   const local = {};
   if (legacy) {
     sync.webhookId = 'legacy-secret';
@@ -55,8 +60,10 @@ function harness({ legacy = false, allowed = true, extractionFails = false, http
       return { ok: httpStatus < 400, status: httpStatus };
     },
   };
+  vm.runInNewContext(profileSource, sandbox, { filename: 'profiles.js' });
+  sandbox.ExtensionProfiles = sandbox.self.ExtensionProfiles;
   vm.runInNewContext(source, sandbox, { filename: 'utils.js' });
-  return { utils: sandbox.self.ExtensionUtils, sync, local, calls, chrome };
+  return { utils: sandbox.self.ExtensionUtils, profiles: sandbox.ExtensionProfiles, sync, local, calls, chrome };
 }
 
 function pageContext() {
@@ -126,6 +133,7 @@ test('manual send posts serialized page data to the configured endpoint', async 
   assert.equal(calls[0].options.method, 'POST');
   assert.equal(calls[0].url, 'https://ha.example.test:8123/api/webhook/local-secret');
   assert.equal(JSON.parse(calls[0].options.body).selected, 'selected text');
+  assert.equal(JSON.parse(calls[0].options.body).context, 'Default');
   assert.equal(JSON.parse(calls[0].options.body).user, 'User');
 });
 
@@ -159,4 +167,59 @@ test('HTTP errors are reported rather than treating rejected POSTs as delivered'
   });
   assert.equal(result.status, 'error');
   assert.match(result.error, /HTTP 500/);
+});
+
+test('configured default profile routes ordinary sends without an override', async() => {
+  const custom = { id: 'p_12345678', name: 'Download video', context: 'YTDL' };
+  const { utils, calls } = harness({ profileConfig: {
+    sendProfiles: [custom], defaultProfileId: custom.id,
+  } });
+  const result = await utils.sendToHomeAssistant({
+    tab: { id: 20, url: 'https://www.example.com/article' },
+    showNotifications: false,
+  });
+  assert.equal(result.status, 'sent');
+  assert.equal(JSON.parse(calls[0].options.body).context, 'YTDL');
+});
+
+test('explicit custom profile overrides default for right-click links and selections', async() => {
+  const custom = { id: 'p_12345678', name: 'Save it', context: 'Save' };
+  const { utils, calls } = harness({ profileConfig: { sendProfiles: [custom] } });
+  const result = await utils.sendToHomeAssistant({
+    tab: { id: 21, url: 'https://www.example.com/article', title: 'Example' },
+    contextInfo: { linkUrl: 'https://destination.example/item', selectionText: 'interesting' },
+    profileId: custom.id,
+    showNotifications: false,
+  });
+  assert.equal(result.status, 'sent');
+  const payload = JSON.parse(calls[0].options.body);
+  assert.equal(payload.context, 'Save');
+  assert.equal(payload.url, 'https://destination.example/item');
+  assert.equal(payload.selected, 'interesting');
+});
+
+test('deleted or unknown profile is never silently replaced by Default', async() => {
+  const { utils, calls } = harness();
+  const result = await utils.sendToHomeAssistant({
+    tab: { id: 22, url: 'https://www.example.com/' },
+    profileId: 'p_unknown1234',
+    showNotifications: false,
+  });
+  assert.equal(result.status, 'error');
+  assert.match(result.error, /no longer exists/);
+  assert.equal(calls.length, 0);
+});
+
+test('profile validation prevents duplicate contexts, IDs and markup-bearing contexts', () => {
+  const { profiles } = harness();
+  const first = { id: 'p_12345678', name: 'YTDL', context: 'YTDL' };
+  const other = { id: 'p_87654321', name: 'Save', context: 'Save' };
+  assert.deepEqual([...profiles.validateProfiles([first, other])].map((p) => p.context), ['YTDL', 'Save']);
+  assert.throws(() => profiles.validateProfiles([first, { ...other, context: 'ytdl' }]), /unique/);
+  assert.throws(() => profiles.validateProfiles([first, { ...other, name: 'ytdl' }]), /unique/);
+  assert.throws(() => profiles.validateProfiles([first, { ...other, id: first.id }]), /unique/);
+  assert.throws(() => profiles.validateProfiles([{ ...first, context: '<script>' }]), /Contexts/);
+  assert.throws(() => profiles.validateProfiles(Array.from({ length: 16 }, (_, i) => ({
+    id: 'p_12345678' + i, name: 'p' + i, context: 'c' + i,
+  }))), /15/);
 });
