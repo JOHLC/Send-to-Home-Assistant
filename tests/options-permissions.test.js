@@ -11,7 +11,13 @@ const utilsSource = fs.readFileSync(path.join(__dirname, '../package/utils.js'),
 
 function harness({ savedHost = 'old.example.test', formHost = 'new.example.test',
   existingGrants = [], status = 200, failSave = false, blockSave = false,
-  failResetLocal = false, failResetSync = false, failRevoke = false } = {}) {
+  failResetLocal = false, failResetSync = false, failRevoke = false, blockTest = false } = {}) {
+  let releaseTest;
+  let testReached;
+  const testStarted = blockTest ? new Promise((resolve) => { testReached = resolve; }) :
+    Promise.resolve();
+  const testGate = blockTest ? new Promise((resolve) => { releaseTest = resolve; }) :
+    Promise.resolve();
   let failLocalRemoval = failResetLocal;
   let failSyncRemoval = failResetSync;
   let failPermissionRemoval = failRevoke;
@@ -125,6 +131,10 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     setTimeout: () => 1, clearTimeout() {},
     fetch: async(url, opts) => {
       requests.push({ url, opts });
+      if (blockTest) {
+        testReached();
+        await testGate;
+      }
       return { status, ok: status >= 200 && status < 300 };
     },
     document: {
@@ -144,8 +154,9 @@ function harness({ savedHost = 'old.example.test', formHost = 'new.example.test'
     sync, local, granted, removed, requested, requests,
     previousOrigin, newOrigin, permanent,
     statusElement: elements.get('status'),
-    elements, context, saveStarted,
+    elements, context, saveStarted, testStarted,
     releaseSave: () => releaseSave?.(),
+    releaseTest: () => releaseTest?.(),
     setResetFailures({ local: localFailure = false, sync: syncFailure = false,
       permissions: permissionFailure = false } = {}) {
       failLocalRemoval = localFailure;
@@ -342,4 +353,73 @@ test('confirmed reset remasks webhook input and resets reveal accessibility stat
   assert.equal(reveal.textContent, 'Show');
   assert.equal(reveal.attributes['aria-pressed'], 'false');
   assert.equal(reveal.attributes['aria-label'], 'Show webhook ID');
+});
+
+test('slow Test blocks Save, Reset and duplicate Test until permission cleanup completes', async() => {
+  const h = harness({ blockTest: true });
+  const pendingTest = h.tryHost();
+  await h.testStarted;
+  assert.equal(h.elements.get('save').disabled, true);
+  assert.equal(h.elements.get('test').disabled, true);
+  assert.equal(h.elements.get('clearConfig').disabled, true);
+  await h.save();
+  assert.equal(await h.clear(), false);
+  await h.tryHost();
+  assert.equal(h.requests.length, 1, 'A second Test must not send a duplicate POST');
+  assert.equal(h.sync.haHost, 'old.example.test', 'Save must not run during Test');
+  assert.equal(h.elements.get('test').disabled, true);
+  h.releaseTest();
+  await pendingTest;
+  assert.equal(h.elements.get('test').disabled, false);
+  assert.equal(h.elements.get('save').disabled, false);
+  assert.equal(h.elements.get('clearConfig').disabled, false);
+  await h.save();
+  assert.equal(h.sync.haHost, 'new.example.test');
+});
+
+test('late initial read cannot restore stale credentials after successful reset', async() => {
+  const h = harness();
+  const original = h.context.ExtensionUtils.getStorageConfig;
+  let resolveInitial;
+  h.context.ExtensionUtils.getStorageConfig = () => new Promise((resolve) => {
+    resolveInitial = resolve;
+  });
+  h.context.loadSavedConfiguration();
+  h.context.ExtensionUtils.getStorageConfig = original;
+  assert.equal(await h.clear(), true);
+  resolveInitial({
+    haHost: 'old.example.test', ssl: true, webhookId: 'stale-secret',
+    userName: 'Former', deviceName: 'Old laptop',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.elements.get('haHost').value, '');
+  assert.equal(h.elements.get('webhookId').value, '');
+  assert.equal(h.elements.get('connectionState').textContent, 'Not configured');
+  assert.equal(h.local.webhookId, undefined);
+});
+
+test('late initial read cannot replace the form after a completed Save', async() => {
+  const h = harness();
+  const original = h.context.ExtensionUtils.getStorageConfig;
+  let resolveInitial;
+  let first = true;
+  h.context.ExtensionUtils.getStorageConfig = () => {
+    if (first) {
+      first = false;
+      return new Promise((resolve) => { resolveInitial = resolve; });
+    }
+    return original();
+  };
+  h.context.loadSavedConfiguration();
+  await h.save();
+  assert.equal(h.sync.haHost, 'new.example.test');
+  assert.equal(h.elements.get('connectionState').textContent, 'Saved');
+  resolveInitial({
+    haHost: 'old.example.test', ssl: true, webhookId: 'stale-secret',
+    userName: 'Former', deviceName: 'Old laptop',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.elements.get('haHost').value, 'new.example.test');
+  assert.equal(h.elements.get('webhookId').value, 'secret');
+  assert.equal(h.elements.get('connectionState').textContent, 'Saved');
 });
