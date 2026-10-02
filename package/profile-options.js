@@ -108,9 +108,11 @@
     form.append(fields, buttons);
     form.addEventListener('submit', async(event) => {
       event.preventDefault();
+      const submittedName = name.input.value.trim();
+      const submittedContext = context.input.value.trim();
       const profiles = current.profiles.map((item) => item.id === profile.id ?
-        { id: item.id, name: name.input.value, context: context.input.value } : item);
-      await persist({ ...current, profiles }, 'Updated ' + profile.name + '.',
+        { id: item.id, name: submittedName, context: submittedContext } : item);
+      await persist({ ...current, profiles }, 'Updated ' + submittedName + '.',
         () => name.input.focus());
     });
     row.replaceChildren(form);
