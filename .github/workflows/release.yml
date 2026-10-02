@@ -57,6 +57,8 @@ jobs:
           echo "Manual repair: existing tag $RELEASE_TAG at $original_sha; packaging source $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Run production checks and package
         run: npm run check
+      - name: Render Options and Popup in headless Chrome
+        run: node scripts/smoke-render-settings.js
       - name: Upload ZIP to the target release
         uses: softprops/action-gh-release@v2
         with:
