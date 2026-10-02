@@ -587,3 +587,80 @@ test('Failed reset releases the shared write gate after pending preferences sett
   assert.equal(await h.clear(), true);
   assert.equal(h.sync.sendProfiles, undefined);
 });
+
+test('delayed update-status read cannot restore stale information after Reset', async() => {
+  const h = harness();
+  const classes = new Set(['hidden']);
+  const updateDiv = {
+    children: [],
+    classList: {
+      add(name) { classes.add(name); },
+      toggle(name, force) { if (force) { classes.add(name); } else { classes.delete(name); } },
+      contains(name) { return classes.has(name); },
+    },
+    replaceChildren() { this.children = []; },
+    appendChild(child) { this.children.push(child); },
+  };
+  h.elements.set('updateStatus', updateDiv);
+  h.context.document.createElement = () => ({ className: '', textContent: '' });
+  h.local.updateCheckEnabled = true;
+  h.local.updateInfo = { isNewer: false };
+  const storage = h.context.chrome.storage.local;
+  const originalGet = storage.get;
+  let finishOldRead;
+  storage.get = (keys, callback) => {
+    if (Array.isArray(keys) && keys.includes('updateInfo')) {
+      const snapshot = { updateInfo: h.local.updateInfo,
+        updateCheckEnabled: h.local.updateCheckEnabled };
+      finishOldRead = () => callback(snapshot);
+      return;
+    }
+    originalGet(keys, callback);
+  };
+  h.context.displayUpdateStatus(updateDiv);
+  assert.equal(typeof finishOldRead, 'function');
+  assert.equal(await h.clear(), true);
+  assert.equal(updateDiv.classList.contains('hidden'), true);
+  finishOldRead();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(updateDiv.classList.contains('hidden'), true,
+    'Stale status read must not unhide update information after Reset');
+  assert.equal(updateDiv.children.length, 0,
+    'Stale update information must not repopulate the cleared status');
+});
+
+test('newer update-status reads supersede earlier callbacks within one revision', () => {
+  const h = harness();
+  const classes = new Set(['hidden']);
+  const updateDiv = {
+    children: [],
+    classList: {
+      toggle(name, force) { if (force) { classes.add(name); } else { classes.delete(name); } },
+      contains(name) { return classes.has(name); },
+    },
+    replaceChildren() { this.children = []; },
+    appendChild(child) { this.children.push(child); },
+  };
+  h.context.document.createElement = () => ({ className: '', textContent: '' });
+  h.local.updateCheckEnabled = true;
+  h.local.updateInfo = { isNewer: false };
+  const originalGet = h.context.chrome.storage.local.get;
+  const pending = [];
+  h.context.chrome.storage.local.get = (keys, callback) => {
+    if (Array.isArray(keys) && keys.includes('updateInfo')) {
+      const snapshot = { updateInfo: h.local.updateInfo,
+        updateCheckEnabled: h.local.updateCheckEnabled };
+      pending.push(() => callback(snapshot));
+      return;
+    }
+    originalGet(keys, callback);
+  };
+  h.context.displayUpdateStatus(updateDiv);
+  h.local.updateCheckEnabled = false;
+  h.local.updateInfo = undefined;
+  h.context.displayUpdateStatus(updateDiv);
+  pending[1]();
+  pending[0]();
+  assert.equal(updateDiv.classList.contains('hidden'), true);
+  assert.equal(updateDiv.children.length, 0);
+});
