@@ -266,9 +266,16 @@ select { padding-right: 32px; }
   .settings-header .version { margin-left: auto; }
 }
 @media (max-width: 520px) {
-  .settings-header { gap: 13px; padding: 22px 0; flex-wrap: wrap; }
-  .app-mark { width: 44px; height: 44px; }
-  .version { margin-left: 0; }
+  .settings-header {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px 13px;
+    padding: 22px 0;
+  }
+  .app-mark { width: 44px; height: 44px; grid-column: 1; grid-row: 1; }
+  .header-copy { grid-column: 2; grid-row: 1; }
+  .version { grid-column: 2; grid-row: 2; margin: 2px 0 0; justify-self: start; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
   .settings-section { margin-bottom: 34px; }
   .settings-card { padding: 17px; }
