@@ -451,7 +451,10 @@ async function handleClearConfig() {
   formRevision++;
   clearBtn.disabled = true;
   try {
-    await Promise.all([
+    // Wait for BOTH storage areas, even when one removal fails. Promise.all
+    // rejects early and could release the reset lock while the other removal
+    // is still pending, deleting a later Save or retry.
+    const removals = await Promise.allSettled([
       new Promise((resolve, reject) => chrome.storage.sync.remove(
         ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName', 'sendProfiles', 'defaultProfileId', 'quickSendDefault'],
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
@@ -461,6 +464,10 @@ async function handleClearConfig() {
         () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(),
       )),
     ]);
+    const failedRemoval = removals.find((result) => result.status === 'rejected');
+    if (failedRemoval) {
+      throw failedRemoval.reason;
+    }
     // Also clean old grants that are not associated with the currently saved host.
     await revokeUnusedWebhookPermissions(null);
     hostInput.value = '';
