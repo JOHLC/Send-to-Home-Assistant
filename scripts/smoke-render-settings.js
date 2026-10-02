@@ -121,6 +121,10 @@ function stubExtension() {
   window.__failResetStorage = false;
   window.__holdConnectionSave = false;
   window.__heldConnectionSave = null;
+  window.__holdProfileSave = false;
+  window.__heldProfileSave = null;
+  window.__holdUpdateSave = false;
+  window.__heldUpdateSave = null;
   window.__holdInitialRead = window.location.search.includes('holdInitial');
   window.__releaseInitialRead = null;
   window.__holdTestPost = false;
@@ -138,6 +142,24 @@ function stubExtension() {
       callback(snapshot);
     },
     set(values, callback) {
+      if (areaName === 'sync' && Object.hasOwn(values, 'sendProfiles') &&
+          window.__holdProfileSave) {
+        window.__holdProfileSave = false;
+        window.__heldProfileSave = () => {
+          Object.assign(data, values);
+          callback?.();
+        };
+        return;
+      }
+      if (areaName === 'local' && Object.hasOwn(values, 'updateCheckEnabled') &&
+          window.__holdUpdateSave) {
+        window.__holdUpdateSave = false;
+        window.__heldUpdateSave = () => {
+          Object.assign(data, values);
+          callback?.();
+        };
+        return;
+      }
       if (areaName === 'sync' && Object.hasOwn(values, 'haHost') &&
           window.__holdConnectionSave) {
         window.__heldConnectionSave = () => {
@@ -571,6 +593,67 @@ async function main() {
       webhookType: 'password', revealText: 'Show', revealPressed: 'false',
     }, 'Confirmed reset must clear storage and re-mask the webhook input');
     console.log('Options interactions: reveal, dirty/save/test, profile edit, preferences and reset confirmation passed.');
+
+    // Profile and update-check writes have separate UI handlers. Keep both
+    // storage callbacks pending, then start Reset; neither may finish after
+    // Reset reports success and restore removed settings.
+    await evaluate(send, `(() => {
+      window.__holdProfileSave = true;
+      const name = document.getElementById('newProfileName');
+      const context = document.getElementById('newProfileContext');
+      name.value = 'Queued profile';
+      context.value = 'Queued';
+      document.getElementById('profileAddForm').requestSubmit();
+    })()`);
+    await waitFor(send, `typeof window.__heldProfileSave === 'function'`,
+      'delayed profile write');
+    await evaluate(send, `(() => {
+      window.__holdUpdateSave = true;
+      document.querySelector('.advanced-settings').open = true;
+      document.getElementById('updateCheckToggle').click();
+    })()`);
+    await waitFor(send, `typeof window.__heldUpdateSave === 'function'`,
+      'delayed update preference write');
+    await evaluate(send, `(() => {
+      document.getElementById('clearConfig').click();
+      document.getElementById('confirmClearConfig').click();
+    })()`);
+    await waitFor(send, `window.ExtensionSettingsCoordinator.resetActive === true`,
+      'reset waiting for preference writes');
+    const pendingPreferences = await evaluate(send, `(() => ({
+      resetActive: window.ExtensionSettingsCoordinator.resetActive,
+      confirmation: !document.getElementById('resetConfirmation')
+        .classList.contains('hidden'),
+      profileButtonDisabled: document.getElementById('newProfileName').disabled,
+      updateDisabled: document.getElementById('updateCheckToggle').disabled,
+      syncHost: window.__testStorage.sync.haHost ?? null,
+    }))()`);
+    assert.deepEqual(pendingPreferences, {
+      resetActive: true, confirmation: true, profileButtonDisabled: true,
+      updateDisabled: true, syncHost: null,
+    }, 'Reset must wait for profile/update writes and disable their controls');
+    await evaluate(send, 'window.__heldProfileSave()');
+    await sleep(30);
+    assert.equal(await evaluate(send, 'window.ExtensionSettingsCoordinator.resetActive'),
+      true, 'Reset must still wait for the update-check write');
+    await evaluate(send, 'window.__heldUpdateSave()');
+    await waitFor(send, `document.getElementById('connectionState')
+      .textContent === 'Not configured' &&
+      document.querySelectorAll('#profilesList .profile-list-row').length === 1 &&
+      !window.ExtensionSettingsCoordinator.resetActive`,
+    'reset after draining profile and update saves');
+    const preferenceAfterReset = await evaluate(send, `(() => ({
+      syncedProfiles: window.__testStorage.sync.sendProfiles ?? null,
+      defaultProfile: window.__testStorage.sync.defaultProfileId ?? null,
+      quickSend: window.__testStorage.sync.quickSendDefault ?? null,
+      updateCheck: window.__testStorage.local.updateCheckEnabled ?? null,
+      webhook: window.__testStorage.local.webhookId ?? null,
+    }))()`);
+    assert.deepEqual(preferenceAfterReset, {
+      syncedProfiles: null, defaultProfile: null, quickSend: null,
+      updateCheck: null, webhook: null,
+    }, 'In-flight profile and update saves must not resurrect reset settings');
+    console.log('Preference races: Reset drains pending profile and update-check writes.');
 
     // An initial asynchronous read can return after Reset. Its old snapshot
     // must not resurrect a previously stored webhook or saved badge.
