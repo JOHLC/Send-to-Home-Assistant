@@ -174,7 +174,7 @@ async function screenshot(send, name) {
 
 async function checkLayout(send, width, mode) {
   const data = await evaluate(send, `(() => {
-    const selectors = ['.settings-shell', '#connection', '#profiles', '#preferences',
+    const selectors = ['.settings-shell', '.header-copy', '#connection', '#profiles', '#preferences',
       '#haHost', '#webhookId', '#defaultProfile', '#newProfileName',
       '#newProfileContext', '#quickSendDefault'];
     const rects = selectors.map((selector) => {
@@ -200,6 +200,10 @@ async function checkLayout(send, width, mode) {
     assert.equal(rect.missing, undefined, mode + ': missing ' + rect.selector);
     assert.ok(rect.width >= 10 && rect.left >= -1 && rect.right <= width + 1,
       mode + ': clipped element ' + rect.selector + ' ' + JSON.stringify(rect));
+  }
+  const header = data.rects.find((rect) => rect.selector === '.header-copy');
+  if (mode === 'Mobile') {
+    assert.ok(header.width >= 240, 'Mobile title is squeezed by the version badge: ' + header.width);
   }
   console.log(mode + ': no horizontal overflow; settings and 2 profiles rendered at ' +
     width + 'px.');
