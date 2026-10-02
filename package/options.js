@@ -29,6 +29,8 @@ const resetConfirmation = document.getElementById('resetConfirmation');
 const confirmResetBtn = document.getElementById('confirmClearConfig');
 const cancelResetBtn = document.getElementById('cancelClearConfig');
 let connectionDirty = false;
+let saveInProgress = false;
+let resetInProgress = false;
 let savedUpdateCheckEnabled = false;
 
 /**
@@ -200,7 +202,13 @@ function displayUpdateStatus(updateDiv) {
  * Load saved configuration from storage
  */
 function loadSavedConfiguration() {
+  // Do not replace edits made while the asynchronous initial read is pending.
+  const wasDirty = connectionDirty;
   ExtensionUtils.getStorageConfig().then((result) => {
+    if (connectionDirty && !wasDirty) {
+      setConnectionState('Unsaved changes', 'unsaved');
+      return;
+    }
     const address = splitStoredAddress(result.haHost, result.ssl);
     hostInput.value = address.hostname;
     sslToggle.checked = result.ssl;
@@ -274,9 +282,22 @@ function setupEventListeners() {
       clearBtn.disabled = false;
     });
     confirmResetBtn.addEventListener('click', async() => {
-      await handleClearConfig();
-      resetConfirmation.classList.add('hidden');
-      clearBtn.disabled = false;
+      if (resetInProgress) {
+        return;
+      }
+      confirmResetBtn.disabled = true;
+      cancelResetBtn.disabled = true;
+      try {
+        const resetSucceeded = await handleClearConfig();
+        if (resetSucceeded) {
+          resetConfirmation.classList.add('hidden');
+          clearBtn.disabled = false;
+        }
+        // Keep confirmation visible after failure so the user can retry.
+      } finally {
+        confirmResetBtn.disabled = false;
+        cancelResetBtn.disabled = false;
+      }
     });
   }
 }
@@ -287,6 +308,9 @@ function setupEventListeners() {
  * Handle save button click
  */
 async function handleSave() {
+  if (saveInProgress || resetInProgress) {
+    return;
+  }
   const config = getFormConfiguration();
   const validation = validateConfiguration(config);
   if (!validation.valid) {
@@ -294,32 +318,42 @@ async function handleSave() {
     return;
   }
 
+  saveInProgress = true;
   saveBtn.disabled = true;
+  testBtn.disabled = true;
+  clearBtn.disabled = true;
   let requestedOrigin = null;
   let previousOrigin = null;
   let saved = false;
   try {
-    // Chrome requires permissions.request to run from the Save click's user gesture.
+    // Permission requests must remain in the click's user-activation path.
     requestedOrigin = await requestWebhookPermission(config);
     const previous = await ExtensionUtils.getStorageConfig();
     previousOrigin = configuredWebhookOrigin(previous);
 
     await saveConfiguration(config);
     saved = true;
-    // Remove all stale optional host grants, including ones left by older builds.
     await revokeUnusedWebhookPermissions(requestedOrigin);
-    connectionDirty = false;
-    setConnectionState('Saved', 'saved');
-    showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
+
+    // Users may edit the form during any of the awaited calls above. The saved
+    // snapshot is authoritative; never mark newer, different values as saved.
+    if (JSON.stringify(getFormConfiguration()) === JSON.stringify(config)) {
+      connectionDirty = false;
+      setConnectionState('Saved', 'saved');
+      showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
+    } else {
+      connectionDirty = true;
+      setConnectionState('Unsaved changes', 'unsaved');
+      showStatus('Previous connection saved, but newer changes are still unsaved. Save again.', 'error');
+    }
   } catch (error) {
     if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
       try {
-        // Never leave a newly requested grant behind after a failed save.
         await revokeUnusedWebhookPermissions(previousOrigin);
       } catch (cleanupError) {
+        setConnectionState('Unsaved changes', 'unsaved');
         showStatus('Save failed: ' + error.message + '. Could not revoke temporary access: ' +
           cleanupError.message, 'error');
-        saveBtn.disabled = false;
         return;
       }
     }
@@ -327,7 +361,11 @@ async function handleSave() {
     showStatus(saved ? 'Settings saved, but old permissions could not be removed: ' + error.message :
       'Save failed: ' + error.message, 'error');
   } finally {
+    saveInProgress = false;
     saveBtn.disabled = false;
+    testBtn.disabled = false;
+    // An already-open confirmation keeps Reset disabled until closed.
+    clearBtn.disabled = !resetConfirmation.classList.contains('hidden');
   }
 }
 
@@ -377,6 +415,11 @@ async function handleTest() {
  * Handle clear config button click
  */
 async function handleClearConfig() {
+  if (resetInProgress || saveInProgress) {
+    showStatus('Wait for the current operation before resetting settings.', 'error');
+    return false;
+  }
+  resetInProgress = true;
   clearBtn.disabled = true;
   try {
     await Promise.all([
@@ -395,6 +438,11 @@ async function handleClearConfig() {
     sslToggle.checked = true;
     portInput.value = '443';
     webhookIdInput.value = '';
+    // Never allow a replacement secret to inherit the revealed text field.
+    webhookIdInput.type = 'password';
+    webhookVisibilityBtn.textContent = 'Show';
+    webhookVisibilityBtn.setAttribute('aria-label', 'Show webhook ID');
+    webhookVisibilityBtn.setAttribute('aria-pressed', 'false');
     userInput.value = '';
     if (deviceInput) {
       deviceInput.value = '';
@@ -424,10 +472,15 @@ async function handleClearConfig() {
       window.dispatchEvent(new Event('send-ha-settings-reset'));
     }
     showStatus('Connection, profiles and update preferences cleared; webhook access revoked.', 'success');
+    return true;
   } catch (error) {
-    showStatus('Could not clear all settings or site access: ' + error.message, 'error');
+    connectionDirty = true;
+    setConnectionState('Reset incomplete', 'unsaved');
+    showStatus('Reset incomplete: ' + error.message +
+      '. Some settings may already be cleared. Retry or cancel and check your settings.', 'error');
+    return false;
   } finally {
-    clearBtn.disabled = false;
+    resetInProgress = false;
   }
 }
 
