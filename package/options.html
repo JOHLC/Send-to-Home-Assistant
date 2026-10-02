@@ -46,7 +46,7 @@
               <label for="haHost">Home Assistant address</label>
               <p class="field-help" id="hostHelp">Hostname or IP address, with an optional port. Don't include https:// or a path.</p>
               <input id="haHost" type="text" placeholder="home.example.com or 192.168.1.10:8123"
-                     autocomplete="url" spellcheck="false" aria-describedby="hostHelp">
+                     autocomplete="off" spellcheck="false" aria-describedby="hostHelp">
             </div>
 
             <label class="check-row" for="sslToggle">
@@ -162,7 +162,7 @@
           <div class="settings-card">
             <div class="preference">
               <label class="check-row" for="quickSendDefault">
-                <input id="quickSendDefault" type="checkbox">
+                <input id="quickSendDefault" type="checkbox" disabled>
                 <span>
                   <strong>Send immediately when I open the popup</strong>
                   <small>Uses your default profile. Leave off to choose a profile and click Send first.</small>
