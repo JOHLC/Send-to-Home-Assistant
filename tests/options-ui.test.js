@@ -47,7 +47,7 @@ test('profile list offers compact rows and inline edit on demand', () => {
   assert.match(profileEditor, /makeButton\('Edit'/);
   assert.match(profileEditor, /profile-row-caption/);
   assert.match(options, /id="preferenceStatus"/);
-  assert.match(options, /Changes here save automatically/);
+  assert.match(options, /Profile actions save independently/);
   assert.match(options, /Automation context/);
 });
 
