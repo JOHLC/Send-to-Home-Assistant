@@ -125,7 +125,7 @@
 
             <div class="subsection-heading">
               <h3>Your profiles</h3>
-              <span>Changes here save automatically</span>
+              <span>Profile actions save independently</span>
             </div>
             <div id="profilesList" class="profiles-list" aria-label="Send profiles"></div>
 
@@ -143,6 +143,7 @@
                   <input id="newProfileContext" type="text" maxlength="64" required
                          pattern="[A-Za-z0-9][A-Za-z0-9_-]*" placeholder="YTDL"
                          spellcheck="false" autocomplete="off">
+                  <p class="field-footnote">Must exactly match the context in your Home Assistant automation (case-sensitive).</p>
                 </div>
               </div>
               <button class="button button-secondary" type="submit" disabled>Add profile</button>
