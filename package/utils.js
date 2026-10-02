@@ -357,27 +357,11 @@ async function getStorageConfig() {
     read('sync', ['haHost', 'ssl', 'webhookId', 'userName', 'deviceName']),
     read('local', ['webhookId']),
   ]);
-  // One-time migration from the previous synchronized webhook ID.
-  if (!local.webhookId && synced.webhookId) {
-    await new Promise((resolve, reject) => {
-      chrome.storage.local.set({ webhookId: synced.webhookId }, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error('Could not migrate webhook settings: ' + chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
-    await new Promise((resolve, reject) => {
-      chrome.storage.sync.remove('webhookId', () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error('Could not remove old synchronized webhook ID: ' + chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
+  // This helper must be read-only. Implicit legacy-secret migration could
+  // finish AFTER an Options Reset and resurrect a removed webhook ID, or
+  // overwrite a newer secret saved while an earlier read was pending.
+  // A legacy sync ID remains readable until Save explicitly moves it to
+  // local storage and removes it from sync under the Options operation lock.
   return {
     haHost: synced.haHost,
     ssl: typeof synced.ssl === 'boolean' ? synced.ssl : true,
