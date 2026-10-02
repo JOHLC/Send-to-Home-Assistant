@@ -17,6 +17,7 @@
   const newContext = document.getElementById('newProfileContext');
   let current = null;
   let saving = false;
+  const coordinator = window.ExtensionSettingsCoordinator;
 
   function showMessage(message, error = false, target = status) {
     if (!target) {
@@ -27,28 +28,39 @@
   }
 
   function setEditingDisabled(disabled) {
-    defaultSelect.disabled = disabled || !current;
-    quickSendToggle.disabled = disabled || !current;
-    addButton.disabled = disabled || !current ||
+    const locked = disabled || coordinator.resetActive;
+    defaultSelect.disabled = locked || !current;
+    quickSendToggle.disabled = locked || !current;
+    addButton.disabled = locked || !current ||
       current.profiles.length >= ExtensionProfiles.MAX_CUSTOM_PROFILES;
-    for (const button of list.querySelectorAll('button')) {
-      button.disabled = disabled;
+    newName.disabled = locked;
+    newContext.disabled = locked;
+    for (const control of list.querySelectorAll('button, input')) {
+      control.disabled = locked;
     }
   }
 
   async function persist(next, successMessage, onFailure, target = status) {
-    if (saving) {
-      showMessage('Wait for the previous change to save.', true, target);
+    if (saving || coordinator.resetActive) {
+      showMessage(coordinator.resetActive ? 'Reset is in progress. Retry afterward.' :
+        'Wait for the previous change to save.', true, target);
       return false;
     }
     saving = true;
     setEditingDisabled(true);
     try {
-      current = await ExtensionProfiles.saveProfileSettings(next);
+      const saved = await coordinator.runWrite(() => ExtensionProfiles.saveProfileSettings(next));
+      if (coordinator.resetActive) {
+        return true;
+      }
+      current = saved;
       render();
       showMessage(successMessage, false, target);
       return true;
     } catch (error) {
+      if (coordinator.resetActive) {
+        return false;
+      }
       showMessage(error.message, true, target);
       if (onFailure) {
         onFailure();
@@ -184,29 +196,34 @@
       list.appendChild(row);
     }
     defaultSelect.value = current.defaultProfileId;
-    defaultSelect.disabled = false;
     quickSendToggle.checked = current.quickSendDefault;
-    quickSendToggle.disabled = false;
-    addButton.disabled = current.profiles.length >= ExtensionProfiles.MAX_CUSTOM_PROFILES;
+    setEditingDisabled(saving);
   }
 
   async function load() {
+    const revision = coordinator.revision;
     try {
-      current = await ExtensionProfiles.getProfileSettings();
+      const next = await ExtensionProfiles.getProfileSettings();
+      if (revision !== coordinator.revision || coordinator.resetActive) {
+        return;
+      }
+      current = next;
       render();
     } catch (error) {
-      showMessage(error.message + ' Reset settings to clear invalid stored profiles.', true);
+      if (revision === coordinator.revision && !coordinator.resetActive) {
+        showMessage(error.message + ' Reset settings to clear invalid stored profiles.', true);
+      }
     }
   }
 
   defaultSelect.addEventListener('change', () => {
-    if (current) {
+    if (current && !coordinator.resetActive) {
       persist({ ...current, defaultProfileId: defaultSelect.value }, 'Default profile updated.');
     }
   });
 
   quickSendToggle.addEventListener('change', () => {
-    if (current) {
+    if (current && !coordinator.resetActive) {
       persist({ ...current, quickSendDefault: quickSendToggle.checked },
         quickSendToggle.checked ? 'Immediate sending enabled.' : 'Choose a profile before sending.',
         null, preferenceStatus);
@@ -215,7 +232,7 @@
 
   addForm.addEventListener('submit', async(event) => {
     event.preventDefault();
-    if (!current || saving) {
+    if (!current || saving || coordinator.resetActive) {
       return;
     }
     const profiles = [...current.profiles, {
@@ -230,14 +247,14 @@
     }
   });
 
-  // Reset must refresh this page immediately, even in environments where
-  // storage change notifications are delayed or not delivered to this page.
+  // The shared coordinator blocks profile edits while Reset drains any
+  // outstanding sync/local preference writes. Reload only after it finishes.
+  window.addEventListener('send-ha-reset-begin', () => setEditingDisabled(true));
   window.addEventListener('send-ha-settings-reset', () => {
     current = null;
-    defaultSelect.disabled = true;
-    quickSendToggle.disabled = true;
-    load();
+    setEditingDisabled(true);
   });
+  window.addEventListener('send-ha-reset-end', () => load());
 
   // Reload when another extension page changes settings or Reset is confirmed.
   chrome.storage.onChanged.addListener((changes, area) => {
