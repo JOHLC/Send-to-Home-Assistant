@@ -105,12 +105,24 @@ test('webhook URLs validate the host and encode supported IDs', () => {
   assert.throws(() => utils.createWebhookUrl('ha.example', true, 'a/b'));
 });
 
-test('webhook secret is migrated once from sync storage to local storage', async () => {
+test('legacy synced webhook remains readable without side effects until explicitly saved', async () => {
   const { utils, local, sync } = harness({ legacy: true });
   const config = await utils.getStorageConfig();
   assert.equal(config.webhookId, 'legacy-secret');
-  assert.equal(local.webhookId, 'legacy-secret');
-  assert.equal(Object.hasOwn(sync, 'webhookId'), false);
+  assert.equal(local.webhookId, undefined);
+  assert.equal(sync.webhookId, 'legacy-secret');
+  const again = await utils.getStorageConfig();
+  assert.equal(again.webhookId, 'legacy-secret');
+  assert.equal(local.webhookId, undefined);
+});
+
+test('local webhook ID takes precedence over a legacy synchronized ID', async () => {
+  const { utils, local, sync } = harness({ legacy: true });
+  local.webhookId = 'replacement-secret';
+  const config = await utils.getStorageConfig();
+  assert.equal(config.webhookId, 'replacement-secret');
+  assert.equal(local.webhookId, 'replacement-secret');
+  assert.equal(sync.webhookId, 'legacy-secret');
 });
 
 test('rejects internal and unsupported URL schemes', () => {
