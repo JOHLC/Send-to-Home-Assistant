@@ -140,6 +140,11 @@ function stubExtension() {
       remove: async() => true,
     },
   });
+  window.__testPosts = [];
+  window.fetch = async(url, options) => {
+    window.__testPosts.push({ url: String(url), method: options?.method, body: options?.body });
+    return { ok: true, status: 200 };
+  };
 }
 
 async function evaluate(send, expression) {
@@ -235,6 +240,60 @@ async function main() {
     await checkLayout(send, 390, 'Mobile');
     await screenshot(send, 'options-mobile');
 
+    // Exercise actual Options event handlers inside Chromium, without a network.
+    const shownType = await evaluate(send, `(() => {
+      document.getElementById('toggleWebhookId').click();
+      return document.getElementById('webhookId').type;
+    })()`);
+    assert.equal(shownType, 'text', 'Webhook reveal button did not work');
+    const dirty = await evaluate(send, `(() => {
+      const host = document.getElementById('haHost');
+      host.value = 'new.example.test';
+      host.dispatchEvent(new Event('input', { bubbles: true }));
+      return document.getElementById('connectionState').textContent;
+    })()`);
+    assert.equal(dirty, 'Unsaved changes', 'Editing a host must show unsaved state');
+    await evaluate(send, "document.getElementById('save').click()");
+    await waitFor(send, "document.getElementById('connectionState').textContent.includes('Saved')",
+      'connection save');
+    await evaluate(send, "document.getElementById('test').click()");
+    await waitFor(send, "document.getElementById('connectionState').textContent === 'Test accepted'",
+      'test POST');
+    const sent = await evaluate(send, "window.__testPosts");
+    assert.equal(sent.length, 1, 'Test should send exactly one sample payload');
+    assert.equal(sent[0].method, 'POST', 'Test must use POST');
+
+    await evaluate(send, `(() => {
+      document.querySelectorAll('#profilesList .profile-list-row')[1]
+        .querySelector('.profile-row-actions button').click();
+      const context = document.querySelector('.profile-edit-form input[id^="context-"]');
+      context.value = 'Save';
+      context.form.requestSubmit();
+    })()`);
+    await waitFor(send, `document.querySelectorAll('#profilesList .profile-context')[1]
+      ?.textContent === 'Save'`, 'profile edit');
+    await evaluate(send, `(() => {
+      const select = document.getElementById('defaultProfile');
+      select.value = 'p_12345678';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const quick = document.getElementById('quickSendDefault');
+      quick.checked = true;
+      quick.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitFor(send, `document.getElementById('preferenceStatus').textContent
+      .includes('Immediate sending enabled')`, 'quick-send preference');
+
+    const resetConfirmation = await evaluate(send, `(() => {
+      document.getElementById('clearConfig').click();
+      const shown = !document.getElementById('resetConfirmation').classList.contains('hidden');
+      document.getElementById('cancelClearConfig').click();
+      return { shown, cancelled: document.getElementById('resetConfirmation')
+        .classList.contains('hidden') };
+    })()`);
+    assert.ok(resetConfirmation.shown && resetConfirmation.cancelled,
+      'Reset must require confirmation and support cancellation');
+    console.log('Options interactions: reveal, dirty/save/test, profile edit, preferences and reset confirmation passed.');
+
     await send('Emulation.setDeviceMetricsOverride', {
       width: 400, height: 640, deviceScaleFactor: 1, mobile: false,
     });
@@ -256,8 +315,19 @@ async function main() {
     console.log('Popup: stable 376px body, full-width profile and Send controls.');
   } finally {
     client?.close();
-    browser?.kill();
-    fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 3 });
+    if (browser && browser.exitCode === null) {
+      browser.kill();
+      await Promise.race([
+        new Promise((resolve) => browser.once('exit', resolve)),
+        sleep(1500),
+      ]);
+    }
+    try {
+      fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
+    } catch (error) {
+      // Directory cleanup is not a UI test failure; the hosted runner is ephemeral.
+      console.warn('Temporary Chrome directory cleanup failed: ' + error.message);
+    }
   }
 }
 
