@@ -13,6 +13,7 @@
 
 // --- DOM Elements ---
 const hostInput = document.getElementById('haHost');
+const portInput = document.getElementById('haPort');
 const sslToggle = document.getElementById('sslToggle');
 const webhookIdInput = document.getElementById('webhookId');
 const userInput = document.getElementById('userName');
@@ -28,6 +29,31 @@ const resetConfirmation = document.getElementById('resetConfirmation');
 const confirmResetBtn = document.getElementById('confirmClearConfig');
 const cancelResetBtn = document.getElementById('cancelClearConfig');
 let connectionDirty = false;
+
+/**
+ * Retain legacy hostname:port settings without changing the stored format used
+ * by the popup and background worker. Unspecified ports use the protocol default.
+ */
+function splitStoredAddress(address, ssl) {
+  const value = typeof address === 'string' ? address.trim() : '';
+  const match = /^(.*):([0-9]{1,5})$/.exec(value);
+  return match ?
+    { hostname: match[1], port: match[2] } :
+    { hostname: value, port: ssl ? '443' : '80' };
+}
+
+function defaultPort(ssl) {
+  return ssl ? '443' : '80';
+}
+
+function onSslChanged() {
+  const previousDefault = defaultPort(!sslToggle.checked);
+  if (portInput.value.trim() === previousDefault) {
+    portInput.value = defaultPort(sslToggle.checked);
+  }
+  updateSslWarning();
+}
+
 
 function setConnectionState(message, state = '') {
   if (!connectionState) {
@@ -145,8 +171,10 @@ function displayUpdateStatus(updateDiv) {
  */
 function loadSavedConfiguration() {
   ExtensionUtils.getStorageConfig().then((result) => {
-    hostInput.value = result.haHost || '';
+    const address = splitStoredAddress(result.haHost, result.ssl);
+    hostInput.value = address.hostname;
     sslToggle.checked = result.ssl;
+    portInput.value = address.port;
     webhookIdInput.value = result.webhookId || '';
     userInput.value = result.userName || '';
     if (deviceInput) {
@@ -170,7 +198,7 @@ function loadSavedConfiguration() {
  */
 function setupEventListeners() {
   // SSL toggle change handler
-  sslToggle.addEventListener('change', updateSslWarning);
+  sslToggle.addEventListener('change', onSslChanged);
   
   // Save button handler
   saveBtn.addEventListener('click', handleSave);
@@ -180,7 +208,7 @@ function setupEventListeners() {
   
   // Display unsaved state for connection fields only. Profiles and preferences
   // save independently and display their own feedback.
-  for (const field of [hostInput, sslToggle, webhookIdInput, userInput, deviceInput]) {
+  for (const field of [hostInput, portInput, sslToggle, webhookIdInput, userInput, deviceInput]) {
     if (!field) {
       continue;
     }
@@ -335,6 +363,7 @@ async function handleClearConfig() {
     await revokeUnusedWebhookPermissions(null);
     hostInput.value = '';
     sslToggle.checked = true;
+    portInput.value = '443';
     webhookIdInput.value = '';
     userInput.value = '';
     if (deviceInput) {
@@ -379,9 +408,16 @@ function updateSslWarning() {
  * @returns {object} Configuration object
  */
 function getFormConfiguration() {
+  const hostname = hostInput.value.trim();
+  const port = portInput.value.trim();
+  const ssl = sslToggle.checked;
+  const normalizedPort = /^[0-9]{1,5}$/.test(port) ? String(Number(port)) : port;
   return {
-    host: hostInput.value.trim(),
-    ssl: sslToggle.checked,
+    hostname,
+    port,
+    host: hostname + (normalizedPort && normalizedPort !== defaultPort(ssl) ?
+      ':' + normalizedPort : ''),
+    ssl,
     webhookId: webhookIdInput.value.trim(),
     user: userInput.value.trim(),
     device: deviceInput ? deviceInput.value.trim() : '',
@@ -394,6 +430,13 @@ function getFormConfiguration() {
  * @returns {object} Validation result
  */
 function validateConfiguration(config) {
+  if (!/^(?:[A-Za-z0-9.-]+|\[[A-Fa-f0-9:]+\])$/.test(config.hostname)) {
+    return { valid: false, message: 'Enter a hostname or IP address without a port or URL path.' };
+  }
+  if (!/^[0-9]{1,5}$/.test(config.port) ||
+      Number(config.port) < 1 || Number(config.port) > 65535) {
+    return { valid: false, message: 'Port must be a number between 1 and 65535.' };
+  }
   try {
     ExtensionUtils.createWebhookUrl(config.host, config.ssl, config.webhookId);
   } catch (error) {
