@@ -526,3 +526,64 @@ test('explicit Save moves a legacy synchronized webhook into local storage', asy
   const stored = await h.context.ExtensionUtils.getStorageConfig();
   assert.equal(stored.webhookId, 'legacy-secret');
 });
+
+test('Reset waits for both pending profile and update preference writes', async() => {
+  const h = harness();
+  const coordinator = h.context.ExtensionSettingsCoordinator;
+  let releaseProfile;
+  let releaseUpdate;
+  let profileStarted;
+  let updateStarted;
+  const profileReady = new Promise((resolve) => { profileStarted = resolve; });
+  const updateReady = new Promise((resolve) => { updateStarted = resolve; });
+  const profileWrite = coordinator.runWrite(() => new Promise((resolve) => {
+    releaseProfile = () => {
+      h.sync.sendProfiles = [{ id: 'p_newprofile1', name: 'Download', context: 'YTDL' }];
+      resolve();
+    };
+    profileStarted();
+  }));
+  const updateWrite = coordinator.runWrite(() => new Promise((resolve) => {
+    releaseUpdate = () => {
+      h.local.updateCheckEnabled = true;
+      resolve();
+    };
+    updateStarted();
+  }));
+  await Promise.all([profileReady, updateReady]);
+  const pendingReset = h.clear();
+  assert.equal(coordinator.resetActive, true);
+  assert.equal(h.sync.haHost, 'old.example.test');
+  await assert.rejects(
+    coordinator.runWrite(() => Promise.resolve()),
+    /Reset is in progress/,
+  );
+  assert.equal(await h.clear(), false, 'A second reset cannot begin');
+  releaseProfile();
+  await profileWrite;
+  assert.equal(coordinator.resetActive, true, 'Reset must still wait for update preference');
+  assert.equal(h.sync.haHost, 'old.example.test');
+  releaseUpdate();
+  await updateWrite;
+  assert.equal(await pendingReset, true);
+  assert.equal(coordinator.resetActive, false);
+  assert.equal(h.sync.sendProfiles, undefined, 'No late profile save may survive reset');
+  assert.equal(h.local.updateCheckEnabled, undefined, 'No late update toggle may survive reset');
+  assert.equal(h.sync.haHost, undefined);
+  assert.equal(h.local.webhookId, undefined);
+});
+
+test('Failed reset releases the shared write gate after pending preferences settle', async() => {
+  const h = harness({ failResetLocal: true });
+  const coordinator = h.context.ExtensionSettingsCoordinator;
+  assert.equal(await h.clear(), false);
+  assert.equal(coordinator.resetActive, false);
+  await coordinator.runWrite(() => new Promise((resolve) => {
+    h.sync.sendProfiles = [{ id: 'p_newprofile1', name: 'Download', context: 'YTDL' }];
+    resolve();
+  }));
+  assert.equal(h.sync.sendProfiles[0].context, 'YTDL');
+  h.setResetFailures();
+  assert.equal(await h.clear(), true);
+  assert.equal(h.sync.sendProfiles, undefined);
+});
