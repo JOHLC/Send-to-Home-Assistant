@@ -131,10 +131,10 @@
       const tag = document.createElement('span');
       tag.className = 'profile-tag';
       if (profile.id === 'default') {
-        tag.textContent = 'Built in';
+        tag.textContent = profile.id === current.defaultProfileId ? 'Built-in default' : 'Built in';
         title.appendChild(tag);
       }
-      if (profile.id === current.defaultProfileId) {
+      if (profile.id !== 'default' && profile.id === current.defaultProfileId) {
         const defaultTag = document.createElement('span');
         defaultTag.className = 'profile-tag';
         defaultTag.textContent = 'Default';
