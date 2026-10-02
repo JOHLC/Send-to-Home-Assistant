@@ -154,7 +154,7 @@ function loadSavedConfiguration() {
     }
     updateSslWarning();
     connectionDirty = false;
-    setConnectionState(result.haHost && result.webhookId ? 'Saved · not tested' : 'Not configured',
+    setConnectionState(result.haHost && result.webhookId ? 'Saved' : 'Not configured',
       result.haHost && result.webhookId ? 'saved' : '');
     if (identitySettings && (result.userName || result.deviceName)) {
       identitySettings.open = true;
@@ -251,7 +251,7 @@ async function handleSave() {
     // Remove all stale optional host grants, including ones left by older builds.
     await revokeUnusedWebhookPermissions(requestedOrigin);
     connectionDirty = false;
-    setConnectionState('Saved · not tested', 'saved');
+    setConnectionState('Saved', 'saved');
     showStatus('Connection settings saved. Send a test to verify your Home Assistant automation.', 'success');
   } catch (error) {
     if (!saved && requestedOrigin && requestedOrigin !== previousOrigin) {
