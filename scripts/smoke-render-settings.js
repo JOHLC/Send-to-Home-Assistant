@@ -103,19 +103,34 @@ async function openDevTools(port) {
 
 // This is a local visual test fixture, not a real user configuration.
 function stubExtension() {
+  // Load the action popup with quick-send enabled to catch missing extension
+  // APIs that a dimensions-only screenshot would silently miss.
+  const isPopup = window.location.pathname.endsWith('/popup.html');
   const sync = {
     haHost: 'home.example.test:8123', ssl: true, userName: 'Example user',
-    deviceName: 'Desktop', defaultProfileId: 'default', quickSendDefault: false,
+    deviceName: 'Desktop', defaultProfileId: 'default', quickSendDefault: isPopup,
     sendProfiles: [{ id: 'p_12345678', name: 'Download video', context: 'YTDL' }],
   };
   const local = { webhookId: 'sample-webhook-id', updateCheckEnabled: false };
-  const area = (data) => ({
+  window.__testStorage = { sync, local };
+  window.__failUpdateSave = false;
+  const area = (data, areaName) => ({
     get(keys, callback) {
       const names = Array.isArray(keys) ? keys : [keys];
       callback(Object.fromEntries(names.filter((name) => Object.hasOwn(data, name))
         .map((name) => [name, data[name]])));
     },
-    set(values, callback) { Object.assign(data, values); callback?.(); },
+    set(values, callback) {
+      if (areaName === 'local' && Object.hasOwn(values, 'updateCheckEnabled') &&
+          window.__failUpdateSave) {
+        window.chrome.runtime.lastError = { message: 'Simulated storage failure' };
+        callback?.();
+        window.chrome.runtime.lastError = null;
+        return;
+      }
+      Object.assign(data, values);
+      callback?.();
+    },
     remove(keys, callback) {
       for (const name of Array.isArray(keys) ? keys : [keys]) {
         delete data[name];
@@ -129,12 +144,31 @@ function stubExtension() {
       getManifest: () => ({ version: '2026.10.3', version_name: '2026.10.3-Beta4' }),
       sendMessage: () => Promise.resolve({}),
       getURL: (file) => file,
+      openOptionsPage() {},
+    },
+    tabs: {
+      query(_options, callback) {
+        callback([{ id: 7, url: 'https://example.com/page', title: 'Example page',
+          favIconUrl: 'https://example.com/favicon.png' }]);
+      },
+    },
+    scripting: {
+      executeScript: async() => [{ result: {
+        title: 'Example page', url: 'https://example.com/page',
+        favicon: 'https://example.com/favicon.png',
+        selected: '', timestamp: new Date().toISOString(), user_agent: 'UI smoke test',
+      } }],
+    },
+    notifications: {
+      create: async() => 'smoke-notification',
+      update: async() => true,
     },
     storage: {
-      sync: area(sync), local: area(local),
+      sync: area(sync, 'sync'), local: area(local, 'local'),
       onChanged: { addListener() {} },
     },
     permissions: {
+      contains: async() => true,
       request: async() => true,
       getAll: async() => ({ origins: [] }),
       remove: async() => true,
@@ -326,6 +360,38 @@ async function main() {
     await waitFor(send, `document.getElementById('preferenceStatus').textContent
       .includes('Immediate sending enabled')`, 'quick-send preference');
 
+    // Advanced update-check option starts disabled, is opt-in, and displays
+    // both successful saves and storage failures beside the control.
+    await evaluate(send, `(() => {
+      const details = document.querySelector('.advanced-settings');
+      details.open = true;
+      document.getElementById('updateCheckToggle').click();
+    })()`);
+    await waitFor(send, `document.getElementById('updatePreferenceStatus')
+      .textContent.includes('enabled')`, 'update preference save');
+    const updateSaved = await evaluate(send, `(() => ({
+      checked: document.getElementById('updateCheckToggle').checked,
+      persisted: window.__testStorage.local.updateCheckEnabled,
+    }))()`);
+    assert.deepEqual(updateSaved, { checked: true, persisted: true },
+      'Enabling update checks must save to local storage');
+
+    await evaluate(send, `(() => {
+      window.__failUpdateSave = true;
+      document.getElementById('updateCheckToggle').click();
+    })()`);
+    await waitFor(send, `document.getElementById('updatePreferenceStatus')
+      .textContent.includes('Simulated storage failure')`, 'update preference failure');
+    const updateFailed = await evaluate(send, `(() => ({
+      checked: document.getElementById('updateCheckToggle').checked,
+      persisted: window.__testStorage.local.updateCheckEnabled,
+      message: document.getElementById('updatePreferenceStatus').textContent,
+    }))()`);
+    assert.equal(updateFailed.checked, true, 'Failed save must restore checked state');
+    assert.equal(updateFailed.persisted, true, 'Failed save must preserve stored preference');
+    assert.match(updateFailed.message, /Could not save update preference/);
+    await evaluate(send, "window.__failUpdateSave = false");
+
     const resetConfirmation = await evaluate(send, `(() => {
       document.getElementById('clearConfig').click();
       const shown = !document.getElementById('resetConfirmation').classList.contains('hidden');
@@ -341,13 +407,22 @@ async function main() {
     })()`);
     await waitFor(send, `document.getElementById('connectionState').textContent ===
       'Not configured'`, 'confirmed reset');
+    await waitFor(send, `document.querySelectorAll('#profilesList .profile-list-row').length === 1`,
+      'profile list after reset');
     const resetState = await evaluate(send, `(() => ({
       host: document.getElementById('haHost').value,
       webhook: document.getElementById('webhookId').value,
+      port: document.getElementById('haPort').value,
       updates: document.getElementById('updateCheckToggle').checked,
+      profiles: document.querySelectorAll('#profilesList .profile-list-row').length,
+      savedHost: window.__testStorage.sync.haHost || '',
+      savedWebhook: window.__testStorage.local.webhookId || '',
+      savedUpdates: window.__testStorage.local.updateCheckEnabled === true,
     }))()`);
-    assert.deepEqual(resetState, { host: '', webhook: '', updates: false },
-      'Confirmed reset did not clear the Options UI');
+    assert.deepEqual(resetState, {
+      host: '', webhook: '', port: '443', updates: false, profiles: 1,
+      savedHost: '', savedWebhook: '', savedUpdates: false,
+    }, 'Confirmed reset did not clear connection, profiles and preferences');
     console.log('Options interactions: reveal, dirty/save/test, profile edit, preferences and reset confirmation passed.');
 
     await send('Emulation.setDeviceMetricsOverride', {
@@ -358,6 +433,17 @@ async function main() {
     });
     await waitFor(send, `document.readyState === 'complete' &&
       document.querySelectorAll('#profileSelect option').length === 2`, 'Popup');
+    await waitFor(send, `document.getElementById('popupMsg').textContent
+      .startsWith('Link sent to Home Assistant!')`, 'quick-send popup success');
+    const popupPayload = await evaluate(send, `(() => ({
+      requests: window.__testPosts.length,
+      context: JSON.parse(window.__testPosts[0].body).context,
+      hasPreview: Boolean(document.querySelector('.preview')),
+      hasError: document.getElementById('popupMsg').textContent.startsWith('Error:'),
+    }))()`);
+    assert.deepEqual(popupPayload,
+      { requests: 1, context: 'Default', hasPreview: true, hasError: false },
+      'Quick-send popup must complete instead of showing an error');
     const popup = await evaluate(send, `(() => ({
       documentWidth: document.documentElement.scrollWidth,
       bodyWidth: document.body.getBoundingClientRect().width,
