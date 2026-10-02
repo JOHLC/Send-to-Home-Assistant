@@ -117,11 +117,21 @@ function stubExtension() {
   window.__failResetStorage = false;
   window.__holdConnectionSave = false;
   window.__heldConnectionSave = null;
+  window.__holdInitialRead = window.location.search.includes('holdInitial');
+  window.__releaseInitialRead = null;
+  window.__holdTestPost = false;
+  window.__releaseTestPost = null;
   const area = (data, areaName) => ({
     get(keys, callback) {
       const names = Array.isArray(keys) ? keys : [keys];
-      callback(Object.fromEntries(names.filter((name) => Object.hasOwn(data, name))
-        .map((name) => [name, data[name]])));
+      const snapshot = Object.fromEntries(names.filter((name) => Object.hasOwn(data, name))
+        .map((name) => [name, data[name]]));
+      if (areaName === 'sync' && names.includes('haHost') && window.__holdInitialRead) {
+        window.__holdInitialRead = false;
+        window.__releaseInitialRead = () => callback(snapshot);
+        return;
+      }
+      callback(snapshot);
     },
     set(values, callback) {
       if (areaName === 'sync' && Object.hasOwn(values, 'haHost') &&
@@ -196,6 +206,12 @@ function stubExtension() {
   window.__testPosts = [];
   window.fetch = async(url, options) => {
     window.__testPosts.push({ url: String(url), method: options?.method, body: options?.body });
+    if (window.__holdTestPost) {
+      window.__holdTestPost = false;
+      return new Promise((resolve) => {
+        window.__releaseTestPost = () => resolve({ ok: true, status: 200 });
+      });
+    }
     return { ok: true, status: 200 };
   };
 }
@@ -296,6 +312,43 @@ async function main() {
     await sleep(200);
     await checkLayout(send, 390, 'Mobile');
     await screenshot(send, 'options-mobile');
+
+    // Hold a network-backed Test while attempting Save, Reset and a duplicate
+    // Test. Each must remain disabled until the original test has cleaned up.
+    await evaluate(send, `(() => {
+      window.__holdTestPost = true;
+      document.getElementById('test').click();
+    })()`);
+    await waitFor(send, 'typeof window.__releaseTestPost === "function"',
+      'held webhook test POST');
+    const beforeDuplicate = await evaluate(send, `(() => ({
+      requests: window.__testPosts.length,
+      testDisabled: document.getElementById('test').disabled,
+      saveDisabled: document.getElementById('save').disabled,
+      resetDisabled: document.getElementById('clearConfig').disabled,
+      savedHost: window.__testStorage.sync.haHost,
+    }))()`);
+    assert.ok(beforeDuplicate.testDisabled && beforeDuplicate.saveDisabled &&
+      beforeDuplicate.resetDisabled, 'Test must disable all conflicting actions');
+    await evaluate(send, `(async() => {
+      await Promise.all([handleTest(), handleSave()]);
+      window.__blockedResetResult = await handleClearConfig();
+    })()`);
+    const blocked = await evaluate(send, `(() => ({
+      requests: window.__testPosts.length,
+      resetSucceeded: window.__blockedResetResult,
+      savedHost: window.__testStorage.sync.haHost,
+      testDisabled: document.getElementById('test').disabled,
+    }))()`);
+    assert.deepEqual(blocked, {
+      requests: beforeDuplicate.requests, resetSucceeded: false,
+      savedHost: beforeDuplicate.savedHost, testDisabled: true,
+    }, 'A pending Test must reject duplicate sends, Save and Reset');
+    await evaluate(send, 'window.__releaseTestPost()');
+    await waitFor(send, `!document.getElementById('test').disabled &&
+      !document.getElementById('save').disabled &&
+      !document.getElementById('clearConfig').disabled`, 'Test cleanup');
+    console.log('Test concurrency: duplicate Test, Save and Reset blocked until cleanup.');
 
     // The existing host:8123 setting must migrate into the separate port field.
     const migratedPort = await evaluate(send, `(() => ({
@@ -512,6 +565,64 @@ async function main() {
       webhookType: 'password', revealText: 'Show', revealPressed: 'false',
     }, 'Confirmed reset must clear storage and re-mask the webhook input');
     console.log('Options interactions: reveal, dirty/save/test, profile edit, preferences and reset confirmation passed.');
+
+    // An initial asynchronous read can return after Reset. Its old snapshot
+    // must not resurrect a previously stored webhook or saved badge.
+    await send('Page.navigate', {
+      url: pathToFileURL(path.join(root, 'package', 'options.html')).href +
+        '?holdInitial=reset',
+    });
+    await waitFor(send, `typeof window.__releaseInitialRead === 'function' &&
+      document.getElementById('confirmClearConfig')`, 'held initial read for reset');
+    await evaluate(send, `(() => {
+      document.querySelector('.advanced-settings').open = true;
+      document.getElementById('clearConfig').click();
+      document.getElementById('confirmClearConfig').click();
+    })()`);
+    await waitFor(send, `document.getElementById('connectionState')
+      .textContent === 'Not configured'`, 'reset before delayed initial read');
+    await evaluate(send, 'window.__releaseInitialRead()');
+    await sleep(50);
+    const afterLateReset = await evaluate(send, `(() => ({
+      host: document.getElementById('haHost').value,
+      webhook: document.getElementById('webhookId').value,
+      status: document.getElementById('connectionState').textContent,
+    }))()`);
+    assert.deepEqual(afterLateReset,
+      { host: '', webhook: '', status: 'Not configured' },
+      'Late initial read must not resurrect secrets after Reset');
+
+    // An initial read can also complete after Save returns. The saved, newer
+    // connection must remain displayed without being overwritten by old data.
+    await send('Page.navigate', {
+      url: pathToFileURL(path.join(root, 'package', 'options.html')).href +
+        '?holdInitial=save',
+    });
+    await waitFor(send, `typeof window.__releaseInitialRead === 'function' &&
+      document.getElementById('save')`, 'held initial read for save');
+    await evaluate(send, `(() => {
+      document.getElementById('haHost').value = 'newer.example.test';
+      document.getElementById('haPort').value = '443';
+      document.getElementById('webhookId').value = 'new-webhook-secret';
+      document.getElementById('haHost').dispatchEvent(
+        new Event('input', { bubbles: true }));
+      document.getElementById('save').click();
+    })()`);
+    await waitFor(send, `document.getElementById('connectionState')
+      .textContent === 'Saved'`, 'save before delayed initial read');
+    await evaluate(send, 'window.__releaseInitialRead()');
+    await sleep(50);
+    const afterLateSave = await evaluate(send, `(() => ({
+      host: document.getElementById('haHost').value,
+      webhook: document.getElementById('webhookId').value,
+      persistedHost: window.__testStorage.sync.haHost,
+      status: document.getElementById('connectionState').textContent,
+    }))()`);
+    assert.deepEqual(afterLateSave, {
+      host: 'newer.example.test', webhook: 'new-webhook-secret',
+      persistedHost: 'newer.example.test', status: 'Saved',
+    }, 'Late initial read must not replace saved connection data');
+    console.log('Initial-load races: delayed reads cannot undo Save or Reset.');
 
     await send('Emulation.setDeviceMetricsOverride', {
       width: 400, height: 640, deviceScaleFactor: 1, mobile: false,
