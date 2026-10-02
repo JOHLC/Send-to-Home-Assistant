@@ -125,6 +125,8 @@ function stubExtension() {
   window.__heldProfileSave = null;
   window.__holdUpdateSave = false;
   window.__heldUpdateSave = null;
+  window.__holdUpdateStatusRead = false;
+  window.__releaseUpdateStatusRead = null;
   window.__holdInitialRead = window.location.search.includes('holdInitial');
   window.__releaseInitialRead = null;
   window.__holdTestPost = false;
@@ -134,6 +136,12 @@ function stubExtension() {
       const names = Array.isArray(keys) ? keys : [keys];
       const snapshot = Object.fromEntries(names.filter((name) => Object.hasOwn(data, name))
         .map((name) => [name, data[name]]));
+      if (areaName === 'local' && names.includes('updateInfo') &&
+          window.__holdUpdateStatusRead) {
+        window.__holdUpdateStatusRead = false;
+        window.__releaseUpdateStatusRead = () => callback(snapshot);
+        return;
+      }
       if (areaName === 'sync' && names.includes('haHost') && window.__holdInitialRead) {
         window.__holdInitialRead = false;
         window.__releaseInitialRead = () => callback(snapshot);
@@ -567,6 +575,13 @@ async function main() {
     await waitFor(send, `!document.getElementById('confirmClearConfig').disabled`,
       'reset retry button');
     await evaluate(send, `(() => {
+      window.__testStorage.local.updateInfo = { isNewer: false };
+      window.__holdUpdateStatusRead = true;
+      displayUpdateStatus(document.getElementById('updateStatus'));
+    })()`);
+    await waitFor(send, `typeof window.__releaseUpdateStatusRead === 'function'`,
+      'pending update-status read');
+    await evaluate(send, `(() => {
       window.__failResetStorage = false;
       document.getElementById('confirmClearConfig').click();
     })()`);
@@ -574,6 +589,15 @@ async function main() {
       'Not configured'`, 'confirmed reset retry');
     await waitFor(send, `document.querySelectorAll('#profilesList .profile-list-row').length === 1`,
       'profile list after reset');
+    await evaluate(send, 'window.__releaseUpdateStatusRead()');
+    await sleep(75);
+    const staleStatus = await evaluate(send, `(() => ({
+      hidden: document.getElementById('updateStatus').classList.contains('hidden'),
+      childCount: document.getElementById('updateStatus').childElementCount,
+    }))()`);
+    assert.deepEqual(staleStatus, { hidden: true, childCount: 0 },
+      'Late update-status read must not restore cleared release information');
+    console.log('Update-status race: stale release information stays cleared after Reset.');
     const resetState = await evaluate(send, `(() => ({
       host: document.getElementById('haHost').value,
       webhook: document.getElementById('webhookId').value,
