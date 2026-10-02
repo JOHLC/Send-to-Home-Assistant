@@ -58,6 +58,12 @@ function validateManifest() {
     errors.push('Version must be in format: number.number.number');
   }
 
+  // Chrome requires a numeric version but permits a readable prerelease version_name.
+  if (manifest.version_name && (typeof manifest.version_name !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(manifest.version_name))) {
+    errors.push('version_name must be a safe, readable release label');
+  }
+
   // Name and description length
   if (manifest.name && manifest.name.length > 45) {
     warnings.push('Extension name is longer than recommended (45 chars)');
