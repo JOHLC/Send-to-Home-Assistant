@@ -228,6 +228,15 @@
     }
   });
 
+  // Reset must refresh this page immediately, even in environments where
+  // storage change notifications are delayed or not delivered to this page.
+  window.addEventListener('send-ha-settings-reset', () => {
+    current = null;
+    defaultSelect.disabled = true;
+    quickSendToggle.disabled = true;
+    load();
+  });
+
   // Reload when another extension page changes settings or Reset is confirmed.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && (changes.sendProfiles || changes.defaultProfileId ||
