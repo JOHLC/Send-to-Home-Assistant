@@ -104,7 +104,7 @@ function validateManifest() {
   if (!(manifest.optional_host_permissions || []).includes('https://*/*')) {
     errors.push('HTTPS optional host permission is required for user-selected HA instances');
   }
-  for (const file of ['background.js', 'popup.html', 'popup.js', 'options.html', 'options.js', 'utils.js', 'profiles.js', 'profile-options.js', 'icon-256.png']) {
+  for (const file of ['background.js', 'popup.html', 'popup.js', 'options.html', 'options.js', 'utils.js', 'profiles.js', 'profile-options.js', 'options.css', 'icon-256.png']) {
     if (!fs.existsSync(path.join(__dirname, '../package', file))) {
       errors.push('Missing extension runtime file: ' + file);
     }
