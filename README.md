@@ -91,8 +91,10 @@ and Preferences sections. See [Configuration](#configuration) for current setup 
 ## Configuration
 
 Settings are organized into **Connection**, **Send profiles**, and **Preferences**.
-Connection changes need **Save connection**; profile changes and preference toggles
-save as you make them. **Send test** submits a sample POST using the fields
+Connection changes need **Save connection**. Choosing a default profile or
+switching a preference saves immediately; creating or editing a profile saves
+when you click **Add profile** or **Save changes**. No second connection save
+is needed for profile changes. **Send test** submits a sample POST using the fields
 currently shown, even if they have not been saved, and may trigger your Home
 Assistant automation. The webhook ID is stored locally in this browser.
 
