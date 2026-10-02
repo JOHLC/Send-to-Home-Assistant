@@ -6,14 +6,14 @@ Chrome requires `manifest.json` `version` to be one to four dot-separated intege
 A GitHub prerelease may use a suffix such as `2026.10.1-Beta2`, but that
 suffix belongs in the extension's display-only `version_name`, not `version`.
 
-For the current Beta2 release:
+For the planned Beta4 release:
 
-- GitHub release tag: `2026.10.1-Beta2`
-- `package/manifest.json`: `"version": "2026.10.1"` and
-  `"version_name": "2026.10.1-Beta2"`
+- GitHub release tag: `2026.10.3-Beta4`
+- `package/manifest.json`: `"version": "2026.10.3"` and
+  `"version_name": "2026.10.3-Beta4"`
 - `package.json` and the two root version entries in `package-lock.json`:
-  `2026.10.1`
-- Expected artifact: `send-to-home-assistant-v2026.10.1-Beta2.zip`
+  `2026.10.3`
+- Expected artifact: `send-to-home-assistant-v2026.10.3-Beta4.zip`
 
 The release workflow runs `scripts/validate-release.js` and rejects mismatched
 tags, base versions and prerelease display names. **Do not remove the version
@@ -24,7 +24,21 @@ tag**. Keep the numeric Chrome version strictly increasing for Chrome Web Store
 updates; merely changing the prerelease display name does not create an
 upgradable browser extension version.
 
-## Next beta: 2026.10.2-Beta3 popup repair
+## Planned Beta4: clearer settings UI
+
+Beta4 separates Connection, Send profiles and Preferences, keeps existing profile
+and webhook storage intact, requires reset confirmation, and adds an isolated
+Options stylesheet. The CI workflow now renders actual Chrome screenshots at
+1280px and 390px, checks that neither view clips, tests the interactive controls,
+and verifies the 376px action popup remains stable.
+
+Before publishing Beta4, review the `settings-ui-screenshots` CI artifact, load
+the verified ZIP in Edge or Chrome and confirm the new Options page works with
+an actual webhook and an alternate context such as `YTDL`. Publish a new
+prerelease tagged `2026.10.3-Beta4` against the final merged `main` commit,
+not the earlier Beta3 tag.
+
+## Previous beta: 2026.10.2-Beta3 popup repair
 
 The Beta2 extension popup could collapse into an unusable narrow column because
 its width was tied to `100vw` with no intrinsic document minimum. Beta3 gives
